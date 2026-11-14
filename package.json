@@ -3,13 +3,15 @@
   "private": true,
   "type": "module",
   "packageManager": "bun@1.4.4",
-  "workspaces": ["apps/*"],
+  "workspaces": [
+    "apps/*"
+  ],
   "scripts": {
     "check": "bun run check:root && bun run --filter '@superduper/*' check",
-    "check:root": "bun run format:check && bun run deadcode",
+    "check:root": "bun run format:check",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "deadcode": "knip"
+    "dev:seed": "bun run --filter @superduper/api dev:seed"
   },
   "devDependencies": {
     "@types/bun": "1.4.2",

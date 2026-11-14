@@ -15,7 +15,7 @@
     "endZoneOffsetSeconds": 7200,
     "biotin": null,
     "caffeine": {
-      "value": 9e-05,
+      "value": 9e-5,
       "unit": "kilograms"
     },
     "calcium": {
@@ -37,7 +37,7 @@
     "folicAcid": null,
     "iodine": null,
     "iron": {
-      "value": 2.1e-06,
+      "value": 2.1e-6,
       "unit": "kilograms"
     },
     "magnesium": null,
@@ -94,11 +94,11 @@
     "vitaminB12": null,
     "vitaminB6": null,
     "vitaminC": {
-      "value": 1.2e-05,
+      "value": 1.2e-5,
       "unit": "kilograms"
     },
     "vitaminD": {
-      "value": 2.5e-09,
+      "value": 2.5e-9,
       "unit": "kilograms"
     },
     "vitaminE": null,

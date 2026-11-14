@@ -3,5 +3,5 @@
   "printWidth": 100,
   "sortPackageJson": false,
   "sortImports": {},
-  "ignorePatterns": ["**/drizzle/**", "**/schema.graphql", "bun.lock"]
+  "ignorePatterns": ["apps/app/**", "**/drizzle/**", "**/schema.graphql", "bun.lock"]
 }
