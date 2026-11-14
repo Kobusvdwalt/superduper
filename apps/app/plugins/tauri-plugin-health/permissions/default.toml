@@ -1,0 +1,14 @@
+"$schema" = "schemas/schema.json"
+
+[default]
+description = "Every health command. Grant only to the configured Super Duper server origin."
+permissions = [
+  "allow-status",
+  "allow-request-permissions",
+  "allow-open-health-connect",
+  "allow-pair",
+  "allow-unpair",
+  "allow-sync-now",
+  "allow-set-auto-sync",
+  "allow-set-history-days",
+]

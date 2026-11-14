@@ -22,4 +22,5 @@ jobs:
         with:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
-      - run: bun run check
+      # apps/app (Rust + Android) is checked by app.yml, only when it or the contracts change.
+      - run: bun run check:ci
