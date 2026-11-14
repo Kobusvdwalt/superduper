@@ -8,6 +8,17 @@ The shell is a thin window around the hosted web app. It loads the configured se
 and grants IPC **only to that exact origin** (`scheme://host[:port]`). A page from any other
 origin, including a different port, has no IPC. In a normal browser none of this exists.
 
+## Older shells
+
+The web app is deployed independently of the shells people have installed, so it must keep
+working inside a shell built from an earlier revision of this contract. Anything added after
+the first release is optional for the web app: a missing `power` section is treated as
+`unsupported`, a missing `sync.nextRetryAt` or type `reread` as `null`, and a command the
+shell does not have (`request_exercise_routes`, `request_battery_exemption`,
+`open_autostart_settings`) is reported as `UNSUPPORTED` with a request to update the app.
+Additions to this contract follow the same rule: new fields and commands only, each with a
+defined meaning when absent.
+
 ## Detecting the shell
 
 The shell defines a frozen global before any page script runs:
