@@ -25,9 +25,7 @@ import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
 import androidx.health.connect.client.records.HeightRecord
 import androidx.health.connect.client.records.HydrationRecord
-import androidx.health.connect.client.records.InstantaneousRecord
 import androidx.health.connect.client.records.IntermenstrualBleedingRecord
-import androidx.health.connect.client.records.IntervalRecord
 import androidx.health.connect.client.records.LeanBodyMassRecord
 import androidx.health.connect.client.records.MenstruationFlowRecord
 import androidx.health.connect.client.records.MenstruationPeriodRecord
@@ -55,6 +53,8 @@ import androidx.health.connect.client.records.WheelchairPushesRecord
 import androidx.health.connect.client.records.metadata.Metadata
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import java.time.Instant
+import java.time.ZoneOffset
 
 /**
  * Explicit serialisers, one per Health Connect record type, following the payload rules of
@@ -62,72 +62,70 @@ import kotlinx.serialization.json.JsonPrimitive
  * targets) carry their subclass name under `type`, which the contract does not cover.
  */
 internal object RecordSerializers {
+    /**
+     * The `HealthRecordInput` for [record]. Times are taken from the payload because
+     * connect-client keeps the interval/instantaneous record interfaces internal.
+     */
     fun envelope(record: Record): JsonObject {
         val type = HealthRecordTypes.of(record)
         val metadata = record.metadata
+        val body = serialize(record)
+        val point = "time" in body
         return payload {
             string("origin", "HEALTH_CONNECT")
             string("recordType", type.name)
             string("sourceRecordId", metadata.id)
             string("dataOrigin", metadata.dataOrigin.packageName.ifEmpty { null })
-            when (record) {
-                is IntervalRecord -> {
-                    instant("startTime", record.startTime)
-                    instant("endTime", record.endTime)
-                    zoneOffset("startZoneOffset", record.startZoneOffset)
-                    zoneOffset("endZoneOffset", record.endZoneOffset)
-                }
-                is InstantaneousRecord -> {
-                    instant("startTime", record.time)
-                    instant("endTime", null)
-                    zoneOffset("startZoneOffset", record.zoneOffset)
-                    zoneOffset("endZoneOffset", null)
-                }
-                else -> error("Unsupported record shape ${type.name}")
-            }
+            raw("startTime", body[if (point) "time" else "startTime"])
+            raw("endTime", if (point) null else body["endTime"])
+            raw("startZoneOffsetSeconds", body[if (point) "zoneOffsetSeconds" else "startZoneOffsetSeconds"])
+            raw("endZoneOffsetSeconds", if (point) null else body["endZoneOffsetSeconds"])
             instant("modifiedAt", metadata.lastModifiedTime)
-            raw("payload", serialize(record))
+            raw("payload", body)
         }
     }
 
+    fun startTime(envelope: JsonObject): Instant =
+        Instant.parse((envelope.getValue("startTime") as JsonPrimitive).content)
+
     fun serialize(record: Record): JsonObject = when (record) {
-        is ActiveCaloriesBurnedRecord -> interval(record) { energy("energy", record.energy) }
-        is BasalBodyTemperatureRecord -> instantaneous(record) {
+        is ActiveCaloriesBurnedRecord -> interval(record.startTime, record.startZoneOffset, record.endTime, record.endZoneOffset, record.metadata) { energy("energy", record.energy) }
+        is BasalBodyTemperatureRecord -> instantaneous(record.time, record.zoneOffset, record.metadata) {
             temperature("temperature", record.temperature)
             constant("measurementLocation", record.measurementLocation, ConstantNames.bodyTemperatureMeasurementLocation)
         }
-        is BasalMetabolicRateRecord -> instantaneous(record) { power("basalMetabolicRate", record.basalMetabolicRate) }
-        is BloodGlucoseRecord -> instantaneous(record) {
+        is BasalMetabolicRateRecord -> instantaneous(record.time, record.zoneOffset, record.metadata) { power("basalMetabolicRate", record.basalMetabolicRate) }
+        is BloodGlucoseRecord -> instantaneous(record.time, record.zoneOffset, record.metadata) {
             bloodGlucose("level", record.level)
             constant("specimenSource", record.specimenSource, ConstantNames.specimenSource)
             constant("mealType", record.mealType, ConstantNames.mealType)
             constant("relationToMeal", record.relationToMeal, ConstantNames.relationToMeal)
         }
-        is BloodPressureRecord -> instantaneous(record) {
+        is BloodPressureRecord -> instantaneous(record.time, record.zoneOffset, record.metadata) {
             pressure("systolic", record.systolic)
             pressure("diastolic", record.diastolic)
             constant("bodyPosition", record.bodyPosition, ConstantNames.bodyPosition)
             constant("measurementLocation", record.measurementLocation, ConstantNames.bloodPressureMeasurementLocation)
         }
-        is BodyFatRecord -> instantaneous(record) { percentage("percentage", record.percentage) }
-        is BodyTemperatureRecord -> instantaneous(record) {
+        is BodyFatRecord -> instantaneous(record.time, record.zoneOffset, record.metadata) { percentage("percentage", record.percentage) }
+        is BodyTemperatureRecord -> instantaneous(record.time, record.zoneOffset, record.metadata) {
             temperature("temperature", record.temperature)
             constant("measurementLocation", record.measurementLocation, ConstantNames.bodyTemperatureMeasurementLocation)
         }
-        is BodyWaterMassRecord -> instantaneous(record) { mass("mass", record.mass) }
-        is BoneMassRecord -> instantaneous(record) { mass("mass", record.mass) }
-        is CervicalMucusRecord -> instantaneous(record) {
+        is BodyWaterMassRecord -> instantaneous(record.time, record.zoneOffset, record.metadata) { mass("mass", record.mass) }
+        is BoneMassRecord -> instantaneous(record.time, record.zoneOffset, record.metadata) { mass("mass", record.mass) }
+        is CervicalMucusRecord -> instantaneous(record.time, record.zoneOffset, record.metadata) {
             constant("appearance", record.appearance, ConstantNames.cervicalMucusAppearance)
             constant("sensation", record.sensation, ConstantNames.cervicalMucusSensation)
         }
-        is CyclingPedalingCadenceRecord -> interval(record) {
+        is CyclingPedalingCadenceRecord -> interval(record.startTime, record.startZoneOffset, record.endTime, record.endZoneOffset, record.metadata) {
             objects("samples", record.samples.map {
                 payload { instant("time", it.time); double("revolutionsPerMinute", it.revolutionsPerMinute) }
             })
         }
-        is DistanceRecord -> interval(record) { length("distance", record.distance) }
-        is ElevationGainedRecord -> interval(record) { length("elevation", record.elevation) }
-        is ExerciseSessionRecord -> interval(record) {
+        is DistanceRecord -> interval(record.startTime, record.startZoneOffset, record.endTime, record.endZoneOffset, record.metadata) { length("distance", record.distance) }
+        is ElevationGainedRecord -> interval(record.startTime, record.startZoneOffset, record.endTime, record.endZoneOffset, record.metadata) { length("elevation", record.elevation) }
+        is ExerciseSessionRecord -> interval(record.startTime, record.startZoneOffset, record.endTime, record.endZoneOffset, record.metadata) {
             constant("exerciseType", record.exerciseType, ConstantNames.exerciseType)
             string("title", record.title)
             string("notes", record.notes)
@@ -136,34 +134,34 @@ internal object RecordSerializers {
             raw("exerciseRouteResult", routeResult(record.exerciseRouteResult))
             string("plannedExerciseSessionId", record.plannedExerciseSessionId)
         }
-        is FloorsClimbedRecord -> interval(record) { double("floors", record.floors) }
-        is HeartRateRecord -> interval(record) {
+        is FloorsClimbedRecord -> interval(record.startTime, record.startZoneOffset, record.endTime, record.endZoneOffset, record.metadata) { double("floors", record.floors) }
+        is HeartRateRecord -> interval(record.startTime, record.startZoneOffset, record.endTime, record.endZoneOffset, record.metadata) {
             objects("samples", record.samples.map {
                 payload { instant("time", it.time); long("beatsPerMinute", it.beatsPerMinute) }
             })
         }
-        is HeartRateVariabilityRmssdRecord -> instantaneous(record) {
+        is HeartRateVariabilityRmssdRecord -> instantaneous(record.time, record.zoneOffset, record.metadata) {
             double("heartRateVariabilityMillis", record.heartRateVariabilityMillis)
         }
-        is HeightRecord -> instantaneous(record) { length("height", record.height) }
-        is HydrationRecord -> interval(record) { volume("volume", record.volume) }
-        is IntermenstrualBleedingRecord -> instantaneous(record) {}
-        is LeanBodyMassRecord -> instantaneous(record) { mass("mass", record.mass) }
-        is MenstruationFlowRecord -> instantaneous(record) {
+        is HeightRecord -> instantaneous(record.time, record.zoneOffset, record.metadata) { length("height", record.height) }
+        is HydrationRecord -> interval(record.startTime, record.startZoneOffset, record.endTime, record.endZoneOffset, record.metadata) { volume("volume", record.volume) }
+        is IntermenstrualBleedingRecord -> instantaneous(record.time, record.zoneOffset, record.metadata) {}
+        is LeanBodyMassRecord -> instantaneous(record.time, record.zoneOffset, record.metadata) { mass("mass", record.mass) }
+        is MenstruationFlowRecord -> instantaneous(record.time, record.zoneOffset, record.metadata) {
             constant("flow", record.flow, ConstantNames.menstruationFlow)
         }
-        is MenstruationPeriodRecord -> interval(record) {}
-        is MindfulnessSessionRecord -> interval(record) {
+        is MenstruationPeriodRecord -> interval(record.startTime, record.startZoneOffset, record.endTime, record.endZoneOffset, record.metadata) {}
+        is MindfulnessSessionRecord -> interval(record.startTime, record.startZoneOffset, record.endTime, record.endZoneOffset, record.metadata) {
             constant("mindfulnessSessionType", record.mindfulnessSessionType, ConstantNames.mindfulnessSessionType)
             string("title", record.title)
             string("notes", record.notes)
         }
-        is NutritionRecord -> interval(record) { nutrition(record) }
-        is OvulationTestRecord -> instantaneous(record) {
+        is NutritionRecord -> interval(record.startTime, record.startZoneOffset, record.endTime, record.endZoneOffset, record.metadata) { nutrition(record) }
+        is OvulationTestRecord -> instantaneous(record.time, record.zoneOffset, record.metadata) {
             constant("result", record.result, ConstantNames.ovulationTestResult)
         }
-        is OxygenSaturationRecord -> instantaneous(record) { percentage("percentage", record.percentage) }
-        is PlannedExerciseSessionRecord -> interval(record) {
+        is OxygenSaturationRecord -> instantaneous(record.time, record.zoneOffset, record.metadata) { percentage("percentage", record.percentage) }
+        is PlannedExerciseSessionRecord -> interval(record.startTime, record.startZoneOffset, record.endTime, record.endZoneOffset, record.metadata) {
             boolean("hasExplicitTime", record.hasExplicitTime)
             constant("exerciseType", record.exerciseType, ConstantNames.exerciseType)
             string("completedExerciseSessionId", record.completedExerciseSessionId)
@@ -171,24 +169,24 @@ internal object RecordSerializers {
             string("title", record.title)
             string("notes", record.notes)
         }
-        is PowerRecord -> interval(record) {
+        is PowerRecord -> interval(record.startTime, record.startZoneOffset, record.endTime, record.endZoneOffset, record.metadata) {
             objects("samples", record.samples.map {
                 payload { instant("time", it.time); power("power", it.power) }
             })
         }
-        is RespiratoryRateRecord -> instantaneous(record) { double("rate", record.rate) }
-        is RestingHeartRateRecord -> instantaneous(record) { long("beatsPerMinute", record.beatsPerMinute) }
-        is SexualActivityRecord -> instantaneous(record) {
+        is RespiratoryRateRecord -> instantaneous(record.time, record.zoneOffset, record.metadata) { double("rate", record.rate) }
+        is RestingHeartRateRecord -> instantaneous(record.time, record.zoneOffset, record.metadata) { long("beatsPerMinute", record.beatsPerMinute) }
+        is SexualActivityRecord -> instantaneous(record.time, record.zoneOffset, record.metadata) {
             constant("protectionUsed", record.protectionUsed, ConstantNames.protectionUsed)
         }
-        is SkinTemperatureRecord -> interval(record) {
+        is SkinTemperatureRecord -> interval(record.startTime, record.startZoneOffset, record.endTime, record.endZoneOffset, record.metadata) {
             objects("deltas", record.deltas.map {
                 payload { instant("time", it.time); temperatureDelta("delta", it.delta) }
             })
             temperature("baseline", record.baseline)
             constant("measurementLocation", record.measurementLocation, ConstantNames.skinTemperatureMeasurementLocation)
         }
-        is SleepSessionRecord -> interval(record) {
+        is SleepSessionRecord -> interval(record.startTime, record.startZoneOffset, record.endTime, record.endZoneOffset, record.metadata) {
             string("title", record.title)
             string("notes", record.notes)
             objects("stages", record.stages.map {
@@ -199,24 +197,24 @@ internal object RecordSerializers {
                 }
             })
         }
-        is SpeedRecord -> interval(record) {
+        is SpeedRecord -> interval(record.startTime, record.startZoneOffset, record.endTime, record.endZoneOffset, record.metadata) {
             objects("samples", record.samples.map {
                 payload { instant("time", it.time); velocity("speed", it.speed) }
             })
         }
-        is StepsCadenceRecord -> interval(record) {
+        is StepsCadenceRecord -> interval(record.startTime, record.startZoneOffset, record.endTime, record.endZoneOffset, record.metadata) {
             objects("samples", record.samples.map {
                 payload { instant("time", it.time); double("rate", it.rate) }
             })
         }
-        is StepsRecord -> interval(record) { long("count", record.count) }
-        is TotalCaloriesBurnedRecord -> interval(record) { energy("energy", record.energy) }
-        is Vo2MaxRecord -> instantaneous(record) {
+        is StepsRecord -> interval(record.startTime, record.startZoneOffset, record.endTime, record.endZoneOffset, record.metadata) { long("count", record.count) }
+        is TotalCaloriesBurnedRecord -> interval(record.startTime, record.startZoneOffset, record.endTime, record.endZoneOffset, record.metadata) { energy("energy", record.energy) }
+        is Vo2MaxRecord -> instantaneous(record.time, record.zoneOffset, record.metadata) {
             double("vo2MillilitersPerMinuteKilogram", record.vo2MillilitersPerMinuteKilogram)
             constant("measurementMethod", record.measurementMethod, ConstantNames.vo2MaxMeasurementMethod)
         }
-        is WeightRecord -> instantaneous(record) { mass("weight", record.weight) }
-        is WheelchairPushesRecord -> interval(record) { long("count", record.count) }
+        is WeightRecord -> instantaneous(record.time, record.zoneOffset, record.metadata) { mass("weight", record.weight) }
+        is WheelchairPushesRecord -> interval(record.startTime, record.startZoneOffset, record.endTime, record.endZoneOffset, record.metadata) { long("count", record.count) }
         else -> error("No serialiser for ${record.javaClass.name}")
     }
 
@@ -236,20 +234,27 @@ internal object RecordSerializers {
         })
     }
 
-    private inline fun interval(record: IntervalRecord, fields: Payload.() -> Unit) = payload {
-        instant("startTime", record.startTime)
-        zoneOffset("startZoneOffset", record.startZoneOffset)
-        instant("endTime", record.endTime)
-        zoneOffset("endZoneOffset", record.endZoneOffset)
+    private inline fun interval(
+        startTime: Instant,
+        startZoneOffset: ZoneOffset?,
+        endTime: Instant,
+        endZoneOffset: ZoneOffset?,
+        metadata: Metadata,
+        fields: Payload.() -> Unit,
+    ) = payload {
+        instant("startTime", startTime)
+        zoneOffset("startZoneOffset", startZoneOffset)
+        instant("endTime", endTime)
+        zoneOffset("endZoneOffset", endZoneOffset)
         fields()
-        raw("metadata", metadata(record.metadata))
+        raw("metadata", metadata(metadata))
     }
 
-    private inline fun instantaneous(record: InstantaneousRecord, fields: Payload.() -> Unit) = payload {
-        instant("time", record.time)
-        zoneOffset("zoneOffset", record.zoneOffset)
+    private inline fun instantaneous(time: Instant, zoneOffset: ZoneOffset?, metadata: Metadata, fields: Payload.() -> Unit) = payload {
+        instant("time", time)
+        zoneOffset("zoneOffset", zoneOffset)
         fields()
-        raw("metadata", metadata(record.metadata))
+        raw("metadata", metadata(metadata))
     }
 
     private fun segment(segment: ExerciseSegment) = payload {

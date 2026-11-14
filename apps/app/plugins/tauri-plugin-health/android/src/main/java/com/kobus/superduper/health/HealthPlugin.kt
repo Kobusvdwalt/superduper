@@ -59,8 +59,9 @@ class HealthPlugin(private val activity: Activity) : Plugin(activity) {
     @Command
     fun status(invoke: Invoke) = respond(invoke)
 
+    // Named apart from Plugin.requestPermissions, which Tauri uses for Android runtime permissions.
     @Command
-    fun requestPermissions(invoke: Invoke) {
+    fun requestHealthPermissions(invoke: Invoke) {
         scope.launch {
             try {
                 if (SyncEngine.availability(context) != "available") {

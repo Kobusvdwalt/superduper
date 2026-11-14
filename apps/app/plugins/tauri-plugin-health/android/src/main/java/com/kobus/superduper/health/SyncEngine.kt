@@ -10,8 +10,6 @@ import androidx.health.connect.client.HealthConnectFeatures
 import androidx.health.connect.client.changes.DeletionChange
 import androidx.health.connect.client.changes.UpsertionChange
 import androidx.health.connect.client.permission.HealthPermission
-import androidx.health.connect.client.records.InstantaneousRecord
-import androidx.health.connect.client.records.IntervalRecord
 import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.request.ChangesTokenRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
@@ -154,24 +152,22 @@ internal object SyncEngine {
         result
     }
 
-    private fun startTime(record: Record): Instant = when (record) {
-        is IntervalRecord -> record.startTime
-        is InstantaneousRecord -> record.time
-        else -> error("Unsupported record shape")
+    private class Read(val type: HealthRecordType, val record: Record) {
+        val envelope = RecordSerializers.envelope(record)
+        val entry = IndexEntry(
+            record.metadata.id,
+            RecordSerializers.startTime(envelope).toEpochMilli(),
+            record.metadata.lastModifiedTime.toEpochMilli(),
+        )
     }
 
-    private fun entry(record: Record) = IndexEntry(
-        record.metadata.id,
-        startTime(record).toEpochMilli(),
-        record.metadata.lastModifiedTime.toEpochMilli(),
-    )
-
     /** Records whose `modifiedAt` the index already holds were sent before and are skipped. */
-    private fun changed(db: SyncDatabase, type: HealthRecordType, records: List<Record>): List<PendingRecord> {
-        val known = db.knownModifiedAt(type.name, records.map { it.metadata.id })
-        return records
-            .filter { known[it.metadata.id] != it.metadata.lastModifiedTime.toEpochMilli() }
-            .map { PendingRecord(type.name, RecordSerializers.envelope(it)) }
+    private fun changed(db: SyncDatabase, reads: List<Read>): List<PendingRecord> {
+        if (reads.isEmpty()) return emptyList()
+        val known = db.knownModifiedAt(reads[0].type.name, reads.map { it.entry.recordId })
+        return reads
+            .filter { known[it.entry.recordId] != it.entry.modifiedAt }
+            .map { PendingRecord(it.type.name, it.envelope) }
     }
 
     private suspend fun syncType(
@@ -188,13 +184,13 @@ internal object SyncEngine {
                 db.forgetType(type.name)
                 break
             }
-            val upserts = page.changes.filterIsInstance<UpsertionChange>().map { it.record }
+            val upserts = page.changes.filterIsInstance<UpsertionChange>().map { Read(type, it.record) }
             val deleted = page.changes.filterIsInstance<DeletionChange>().map { it.recordId }
             val now = Instant.now()
             db.commit(
                 type.name,
-                Batches.build(changed(db, type, upserts), deleted.map { PendingDeletion(type.name, it, now) }),
-                seen = upserts.map(::entry),
+                Batches.build(changed(db, upserts), deleted.map { PendingDeletion(type.name, it, now) }),
+                seen = upserts.map { it.entry },
                 scan = null,
                 removed = deleted,
                 cursor = page.nextChangesToken,
@@ -239,10 +235,11 @@ internal object SyncEngine {
                         pageToken = pageToken,
                     ),
                 )
+                val reads = page.records.map { Read(type, it) }
                 db.commit(
                     type.name,
-                    Batches.build(changed(db, type, page.records), emptyList()),
-                    seen = page.records.map(::entry),
+                    Batches.build(changed(db, reads), emptyList()),
+                    seen = reads.map { it.entry },
                     scan = state.scan,
                     removed = emptyList(),
                 )

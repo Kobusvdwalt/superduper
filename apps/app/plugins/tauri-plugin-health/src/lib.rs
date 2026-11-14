@@ -120,7 +120,7 @@ async fn request_permissions<R: Runtime>(
     health: State<'_, Health<R>>,
 ) -> Result<Value, Error> {
     health.authorise(&webview)?;
-    with_server(&health, "requestPermissions", json!({})).await
+    with_server(&health, "requestHealthPermissions", json!({})).await
 }
 
 #[tauri::command]
