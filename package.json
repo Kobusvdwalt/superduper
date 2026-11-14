@@ -1,0 +1,8 @@
+{
+  "name": "superduper",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "check": "bun run --filter '*' check"
+  }
+}
