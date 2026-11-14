@@ -66,5 +66,30 @@ services:
         - action: rebuild
           path: ./bun.lock
 
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/dev.Dockerfile
+    ports:
+      - "${PORT_WEB:-4401}:4401"
+    environment:
+      WEB_PORT: "4401"
+      API_PROXY_TARGET: http://api:4400
+    depends_on:
+      api:
+        condition: service_healthy
+    develop:
+      watch:
+        - action: sync
+          path: ./apps/web/src
+          target: /repo/apps/web/src
+        - action: sync
+          path: ./apps/web/index.html
+          target: /repo/apps/web/index.html
+        - action: rebuild
+          path: ./apps/web/package.json
+        - action: rebuild
+          path: ./bun.lock
+
 volumes:
   pgdata:

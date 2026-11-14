@@ -5,6 +5,7 @@ import {
   type healthNutritionEntries,
   type healthQuantitySamples,
   type healthRawRecords,
+  type healthRawRecordVersions,
   type healthSleepSessions,
   type healthSleepStages,
   type healthWorkoutLaps,
@@ -23,6 +24,7 @@ import { pageType } from "../pagination";
 import {
   AGGREGATIONS,
   BUCKETS,
+  listRawRecordVersions,
   listSleepStages,
   listWorkoutLaps,
   listWorkoutRoute,
@@ -122,7 +124,7 @@ const SleepStageType = builder
     }),
   });
 
-const SleepSessionType = builder
+export const SleepSessionType = builder
   .objectRef<typeof healthSleepSessions.$inferSelect>("HealthSleepSession")
   .implement({
     fields: (t) => ({
@@ -182,7 +184,7 @@ const RouteStatusEnum = builder.enumType("HealthRouteStatus", {
   values: ["DATA", "NO_DATA", "CONSENT_REQUIRED"] as const,
 });
 
-const WorkoutType = builder
+export const WorkoutType = builder
   .objectRef<typeof healthWorkouts.$inferSelect>("HealthWorkout")
   .implement({
     fields: (t) => ({
@@ -258,7 +260,30 @@ const NutritionEntryType = builder
 
 export const NutritionEntryPage = pageType("HealthNutritionEntryPage", NutritionEntryType);
 
-const RawRecordType = builder
+const RecordOperationEnum = builder.enumType("HealthRecordOperation", {
+  values: ["UPSERT", "DELETE"] as const,
+});
+
+const RawRecordVersionType = builder
+  .objectRef<typeof healthRawRecordVersions.$inferSelect>("HealthRawRecordVersion")
+  .implement({
+    description: "One distinct version of a record or deletion as received.",
+    fields: (t) => ({
+      id: t.expose("id", { type: "UUID" }),
+      operation: t.expose("operation", { type: RecordOperationEnum }),
+      applied: t.exposeBoolean("applied", {
+        description: "Whether this version became the current state when it arrived.",
+      }),
+      modifiedAt: t.expose("modifiedAt", { type: "DateTime", nullable: true }),
+      deletedAt: t.expose("deletedAt", { type: "DateTime", nullable: true }),
+      receivedAt: t.expose("receivedAt", { type: "DateTime" }),
+      schemaVersion: t.exposeInt("schemaVersion"),
+      syncBatchId: t.expose("syncBatchId", { type: "UUID" }),
+      payload: t.expose("payload", { type: "JSON", nullable: true }),
+    }),
+  });
+
+export const RawRecordType = builder
   .objectRef<typeof healthRawRecords.$inferSelect>("HealthRawRecord")
   .implement({
     description: "A record exactly as the client pushed it; the source of every typed table.",
@@ -281,6 +306,11 @@ const RawRecordType = builder
       projectionError: t.exposeString("projectionError", {
         nullable: true,
         description: "Why the typed projection failed; the record itself is still stored.",
+      }),
+      versions: t.field({
+        type: [RawRecordVersionType],
+        description: "Every version received for this record's source identity, oldest first.",
+        resolve: (record, _args, ctx) => listRawRecordVersions(ctx.db, record),
       }),
     }),
   });

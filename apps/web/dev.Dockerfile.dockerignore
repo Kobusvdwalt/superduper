@@ -1,0 +1,8 @@
+**/node_modules
+**/dist
+**/server-dist
+**/target
+.git
+.env
+apps/app
+apps/api
