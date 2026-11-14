@@ -17,7 +17,7 @@
     "db:generate": "bunx --bun drizzle-kit generate",
     "db:check": "bun run scripts/check-migrations.ts",
     "health:reproject": "bun run scripts/health-reproject.ts",
-    "dev:seed": "bun --env-file=default.env run scripts/dev-seed.ts"
+    "dev:seed": "bun --env-file=../../default.env --env-file=../../.env run scripts/dev-seed.ts"
   },
   "dependencies": {
     "@pothos/core": "4.13.1",
