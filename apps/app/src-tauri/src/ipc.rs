@@ -10,9 +10,15 @@ use crate::config::{self, ServerUrl, Source};
 
 pub const MAIN_WINDOW: &str = "main";
 
+/// Origin of the bundled pages. Tauri serves them from `http://tauri.localhost` on Android
+/// and Windows and from the `tauri://localhost` custom scheme elsewhere.
+#[cfg(any(windows, target_os = "android"))]
+const LOCAL_ORIGIN: &str = "http://tauri.localhost";
+#[cfg(not(any(windows, target_os = "android")))]
+const LOCAL_ORIGIN: &str = "tauri://localhost";
+
 #[derive(Default)]
 pub struct ShellState {
-    local_origin: Mutex<Option<String>>,
     server: Mutex<Option<ServerUrl>>,
     granted: Mutex<HashSet<String>>,
 }
@@ -38,16 +44,8 @@ impl ShellState {
             .map(|server| server.origin.clone())
     }
 
-    pub fn set_local_origin(&self, url: &Url) {
-        *self.local_origin.lock().unwrap() = origin_of(url);
-    }
-
-    pub fn local_url(&self) -> Option<Url> {
-        self.local_origin
-            .lock()
-            .unwrap()
-            .as_deref()
-            .and_then(|origin| Url::parse(&format!("{origin}/index.html")).ok())
+    pub fn local_url(&self) -> Url {
+        Url::parse(&format!("{LOCAL_ORIGIN}/index.html")).expect("valid local URL")
     }
 
     /// True when `url` is the configured server origin. Capabilities added at runtime cannot
@@ -57,7 +55,7 @@ impl ShellState {
     }
 
     fn is_local(&self, url: &Url) -> bool {
-        origin_of(url).is_some() && origin_of(url) == *self.local_origin.lock().unwrap()
+        origin_of(url).as_deref() == Some(LOCAL_ORIGIN)
     }
 
     pub fn set_server<R: Runtime>(
@@ -201,8 +199,8 @@ pub fn set_server_url<R: Runtime>(
     shell
         .set_server(&app, server)
         .map_err(|error| CommandError::new("INTERNAL", error.to_string()))?;
-    if let (Some(window), Some(local)) = (app.get_webview_window(MAIN_WINDOW), shell.local_url()) {
-        let _ = window.navigate(local);
+    if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
+        let _ = window.navigate(shell.local_url());
     }
     Ok(server_state(&shell))
 }

@@ -8,7 +8,7 @@
     "dev": "tauri dev",
     "build": "tauri build",
     "android:dev": "tauri android dev",
-    "android:build": "tauri android build --debug --apk --target aarch64",
+    "android:build": "tauri android build --debug --apk --target aarch64 --target armv7",
     "android:test": "sh scripts/android-test.sh",
     "check": "sh scripts/check.sh"
   },

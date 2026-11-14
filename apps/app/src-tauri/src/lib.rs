@@ -47,8 +47,7 @@ pub fn run() {
                 .title("Super Duper")
                 .inner_size(1200.0, 820.0)
                 .min_inner_size(360.0, 560.0);
-            let window = builder.build()?;
-            shell.set_local_origin(&window.url()?);
+            builder.build()?;
             shell.set_server(app.handle(), config::load(app.handle()))?;
             Ok(())
         })
