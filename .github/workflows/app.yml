@@ -42,6 +42,15 @@ jobs:
           distribution: temurin
           java-version: "25"
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          # Also save from pull requests; most app runs happen there.
+          cache-read-only: false
       # cargo fmt, clippy -D warnings, cargo test, then the plugin's JVM unit tests (serialisers
       # against contracts/health-connect/v1, sync queue). Uses the runner's preinstalled Android SDK.
       - run: sh apps/app/scripts/check.sh
+      - name: Summarise JVM tests
+        if: always()
+        run: |
+          results=apps/app/plugins/tauri-plugin-health/android/build/test-results/testDebugUnitTest
+          grep -h '<testsuite ' "$results"/TEST-*.xml | sed -E 's/.*name="([^"]+)" tests="([0-9]+)" skipped="([0-9]+)" failures="([0-9]+)" errors="([0-9]+)".*/\1: \2 tests, \3 skipped, \4 failed, \5 errors/'
+          grep -q 'testcase name="matchesContractFixtures"' "$results"/TEST-*.xml
