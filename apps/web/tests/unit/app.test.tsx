@@ -42,7 +42,17 @@ const SERIES = (variables: Record<string, unknown>) => ({
     quantitySeries: {
       metric: variables.metric,
       unit: variables.metric === "STEPS" ? "count" : "bpm",
-      buckets: [{ bucketStart: "2026-11-01T00:00:00.000Z", value: 9000, count: 17 }],
+      cumulative: variables.metric === "STEPS",
+      sourceMode: variables.metric === "STEPS" && !variables.sourceMode ? "PREFERRED" : "ALL",
+      buckets: [
+        {
+          bucketStart: "2026-11-01T00:00:00.000Z",
+          value: 9000,
+          count: 17,
+          dataOrigins: ["com.example.phone"],
+        },
+      ],
+      sources: [{ dataOrigin: "com.example.phone", days: 1, samples: 17 }],
     },
   },
 });
@@ -86,7 +96,15 @@ describe("app", () => {
     const byMetric = Object.fromEntries(
       series.map((call) => [call.variables.metric, call.variables]),
     );
-    expect(byMetric.STEPS).toMatchObject({ aggregation: "SUM", bucket: "DAY", dataOrigin: null });
+    expect(byMetric.STEPS).toMatchObject({
+      aggregation: "SUM",
+      bucket: "DAY",
+      dataOrigin: null,
+      sourceMode: null,
+    });
+    expect(
+      await screen.findByText(/Preferred source per day: com.example.phone \(1 d\)/),
+    ).toBeDefined();
     expect(byMetric.HEART_RATE).toMatchObject({ aggregation: "AVG" });
     expect(byMetric.STEPS?.timeZone).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
   });
@@ -104,6 +122,53 @@ describe("app", () => {
     expect(series[0]?.variables.dataOrigin).toBe("com.example.watch");
     fireEvent.change(screen.getByLabelText("Data origin"), { target: { value: "" } });
     await waitFor(() => expect(router.state.location.search).toEqual({}));
+  });
+
+  test("choosing all sources asks for every origin added up", async () => {
+    const { calls, router } = renderApp("/health", {
+      responses: { Coverage: COVERAGE, QuantitySeries: SERIES },
+    });
+    await screen.findByText("Metric coverage");
+    fireEvent.change(screen.getByLabelText("Data origin"), { target: { value: "*all" } });
+    await waitFor(() => expect(router.state.location.search).toEqual({ sources: "ALL" }));
+    await waitFor(() =>
+      expect(
+        calls.some(
+          (call) => call.operation === "QuantitySeries" && call.variables.sourceMode === "ALL",
+        ),
+      ).toBe(true),
+    );
+    expect(await screen.findByText(/All sources added up, may double count/)).toBeDefined();
+  });
+
+  test("a cumulative metric's source priority can be reordered and saved", async () => {
+    const { calls } = renderApp("/health/metrics/STEPS", {
+      responses: {
+        Coverage: COVERAGE,
+        QuantitySeries: SERIES,
+        QuantitySamples: () => ({ health: { quantitySamples: { items: [], nextCursor: null } } }),
+        SourcePriority: () => ({
+          health: {
+            sourcePriority: {
+              metric: "STEPS",
+              savedOrder: [],
+              origins: [
+                { dataOrigin: "com.example.phone", rank: 1, saved: false, days: 20, samples: 400 },
+                { dataOrigin: "com.example.watch", rank: 2, saved: false, days: 18, samples: 900 },
+              ],
+            },
+          },
+        }),
+        SetSourcePriority: () => ({ health: { setSourcePriority: { metric: "STEPS" } } }),
+      },
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Move com.example.watch up" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save order" }));
+    await waitFor(() =>
+      expect(calls.find((call) => call.operation === "SetSourcePriority")?.variables).toMatchObject(
+        { metric: "STEPS", dataOrigins: ["com.example.watch", "com.example.phone"] },
+      ),
+    );
   });
 
   test("a record shows its payload and version history", async () => {

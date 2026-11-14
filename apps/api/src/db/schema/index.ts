@@ -6,6 +6,7 @@ export * from "./health_raw_record_versions";
 export * from "./health_raw_records";
 export * from "./health_sleep_sessions";
 export * from "./health_sleep_stages";
+export * from "./health_source_priorities";
 export * from "./health_workout_laps";
 export * from "./health_workout_route_points";
 export * from "./health_workout_segments";

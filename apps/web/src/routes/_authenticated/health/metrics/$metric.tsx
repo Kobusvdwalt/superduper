@@ -2,11 +2,18 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 
 import { SamplesTable } from "@/components/health/samples-table";
 import { SeriesControls } from "@/components/health/series-controls";
+import { SourcePriority } from "@/components/health/source-priority";
 import { PageHeader, Section } from "@/components/page";
 import { PagedState } from "@/components/paged-state";
 import { EmptyState } from "@/components/states";
 import { useCoverage, useQuantitySamples } from "@/hooks/use-health";
-import { aggregationsFor, defaultAggregation, isHealthMetric, metricLabel } from "@/lib/metrics";
+import {
+  aggregationsFor,
+  defaultAggregation,
+  isCumulative,
+  isHealthMetric,
+  metricLabel,
+} from "@/lib/metrics";
 import { seriesSearch } from "@/lib/search";
 import { dayRange } from "@/lib/time";
 
@@ -64,6 +71,11 @@ function MetricDetail() {
           linkToDetail={false}
         />
       </div>
+      {isCumulative(metric) ? (
+        <Section title="Source priority">
+          <SourcePriority metric={metric} />
+        </Section>
+      ) : null}
       <Section title="Samples">
         <Samples metric={metric} {...dayRange(values.from, values.to)} dataOrigin={values.origin} />
       </Section>

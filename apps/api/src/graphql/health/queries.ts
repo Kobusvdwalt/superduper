@@ -1,7 +1,10 @@
+import { sourcePriority } from "../../health/sources";
 import { builder } from "../builder";
 import { requireViewer } from "../context";
+import { apiError } from "../errors";
 import {
   clientSyncs,
+  isTimeZone,
   getRawRecord,
   getSleepSession,
   getWorkout,
@@ -21,6 +24,7 @@ import {
   HealthAggregationEnum,
   HealthBucketEnum,
   HealthMetricEnum,
+  HealthSourceModeEnum,
   MetricCoverageType,
   NutritionEntryPage,
   QuantitySamplePage,
@@ -30,6 +34,7 @@ import {
   RecordTypeCoverageType,
   SleepSessionPage,
   SleepSessionType,
+  SourcePriorityType,
   SyncBatchPage,
   WorkoutPage,
   WorkoutType,
@@ -61,20 +66,44 @@ builder.objectFields(Health.query, (t) => {
         to: t.arg({ type: "DateTime", required: true }),
         bucket: t.arg({ type: HealthBucketEnum, required: true }),
         aggregation: t.arg({ type: HealthAggregationEnum, required: true }),
-        dataOrigin: t.arg.string({ required: false }),
+        dataOrigin: t.arg.string({
+          required: false,
+          description: "Only samples written by this app; the source mode does not apply.",
+        }),
+        sourceMode: t.arg({
+          type: HealthSourceModeEnum,
+          required: false,
+          description:
+            "For a cumulative metric without `dataOrigin`; defaults to PREFERRED. Ignored otherwise.",
+        }),
         timeZone: t.arg.string({
           required: false,
           defaultValue: "UTC",
-          description: "IANA name, e.g. `Africa/Johannesburg`.",
+          description: "IANA name, e.g. `Africa/Johannesburg`. Also defines the local day.",
         }),
       },
-      resolve: async (_root, args, ctx) => ({
-        metric: args.metric,
-        buckets: await quantitySeries(ctx.db, requireViewer(ctx).userId, {
+      resolve: (_root, args, ctx) =>
+        quantitySeries(ctx.db, requireViewer(ctx).userId, {
           ...args,
           timeZone: args.timeZone ?? "UTC",
         }),
-      }),
+    }),
+    sourcePriority: t.field({
+      type: SourcePriorityType,
+      description: "The data origin order PREFERRED series of this metric use, and why.",
+      args: {
+        metric: t.arg({ type: HealthMetricEnum, required: true }),
+        timeZone: t.arg.string({
+          required: false,
+          defaultValue: "UTC",
+          description: "Defines the local days counted for the default ranking.",
+        }),
+      },
+      resolve: (_root, args, ctx) => {
+        const timeZone = args.timeZone ?? "UTC";
+        if (!isTimeZone(timeZone)) throw apiError("BAD_USER_INPUT", "Unknown timeZone.");
+        return sourcePriority(ctx.db, requireViewer(ctx).userId, args.metric, timeZone);
+      },
     }),
     sleepSessions: t.field({
       type: SleepSessionPage,

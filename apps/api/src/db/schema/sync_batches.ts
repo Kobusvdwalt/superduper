@@ -4,7 +4,10 @@ import { clients } from "./clients";
 import { id, instant, timestamps } from "./columns";
 import { users } from "./users";
 
-/** One acknowledged sync batch; `(client_id, batch_id)` is the idempotency key. */
+/**
+ * One acknowledged sync batch; `(client_id, batch_id)` is the idempotency key. Deleting a client
+ * keeps its batches (and the health data that references them) with a null client.
+ */
 export const syncBatches = pgTable(
   "sync_batches",
   {
@@ -12,9 +15,7 @@ export const syncBatches = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    clientId: uuid("client_id")
-      .notNull()
-      .references(() => clients.id, { onDelete: "cascade" }),
+    clientId: uuid("client_id").references(() => clients.id, { onDelete: "set null" }),
     domain: text("domain").notNull(),
     batchId: uuid("batch_id").notNull(),
     schemaVersion: integer("schema_version").notNull(),

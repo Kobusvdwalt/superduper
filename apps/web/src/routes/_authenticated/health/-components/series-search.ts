@@ -6,6 +6,7 @@ type SeriesSearch = {
   to?: string;
   bucket?: HealthBucket;
   origin?: string;
+  sources?: "ALL";
   aggregation?: HealthAggregation;
 };
 
@@ -14,6 +15,7 @@ type Patch = {
   to?: string;
   bucket?: HealthBucket;
   origin?: string | null;
+  sources?: "ALL" | null;
   aggregation?: HealthAggregation;
 };
 
@@ -22,11 +24,18 @@ export function seriesValues(search: SeriesSearch) {
     ...resolveRange(search),
     bucket: search.bucket ?? "DAY",
     origin: search.origin ?? null,
+    sources: search.origin ? null : (search.sources ?? null),
   };
 }
 
 export function applyPatch(previous: SeriesSearch, patch: Patch): SeriesSearch {
-  const next: SeriesSearch = { ...previous, ...patch, origin: previous.origin };
+  const next: SeriesSearch = {
+    ...previous,
+    ...patch,
+    origin: previous.origin,
+    sources: previous.sources,
+  };
   if ("origin" in patch) next.origin = patch.origin ?? undefined;
+  if ("sources" in patch) next.sources = patch.sources ?? undefined;
   return next;
 }
