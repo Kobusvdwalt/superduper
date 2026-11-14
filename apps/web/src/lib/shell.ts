@@ -37,6 +37,13 @@ type TypeStatus = {
   sentDeletions: number;
   lastReadAt: string | null;
   lastError: string | null;
+  reread: "pending" | "running" | null;
+};
+
+export type Power = {
+  batteryOptimization: "exempt" | "optimized" | "unsupported";
+  backgroundRestricted: boolean | null;
+  autostartSettings: "available" | "unsupported";
 };
 
 export type HealthStatus = {
@@ -52,6 +59,7 @@ export type HealthStatus = {
     history: Grant;
     exerciseRoutes: Grant;
   };
+  power: Power;
   pairing: {
     paired: boolean;
     clientId: string | null;
@@ -69,6 +77,7 @@ export type HealthStatus = {
     queuedRecords: number;
     queuedDeletions: number;
     rejectedBatches: number;
+    nextRetryAt: string | null;
     types: TypeStatus[];
   };
 };
@@ -78,6 +87,7 @@ type ShellErrorCode =
   | "FORBIDDEN"
   | "INVALID_ARGUMENT"
   | "UNAVAILABLE"
+  | "UNSUPPORTED"
   | "NOT_PAIRED"
   | "UNAUTHENTICATED"
   | "INTERNAL"
@@ -87,6 +97,7 @@ const CONTRACT_CODES = new Set<string>([
   "FORBIDDEN",
   "INVALID_ARGUMENT",
   "UNAVAILABLE",
+  "UNSUPPORTED",
   "NOT_PAIRED",
   "UNAUTHENTICATED",
   "INTERNAL",
@@ -125,6 +136,9 @@ export type Shell = {
     syncNow: () => Promise<HealthStatus>;
     setAutoSync: (enabled: boolean) => Promise<HealthStatus>;
     setHistoryDays: (days: number) => Promise<HealthStatus>;
+    requestExerciseRoutes: () => Promise<HealthStatus>;
+    requestBatteryExemption: () => Promise<HealthStatus>;
+    openAutostartSettings: () => Promise<HealthStatus>;
   };
 };
 
@@ -174,6 +188,9 @@ export function detectShell(
       syncNow: () => health("sync_now"),
       setAutoSync: (enabled) => health("set_auto_sync", { enabled }),
       setHistoryDays: (days) => health("set_history_days", { days }),
+      requestExerciseRoutes: () => health("request_exercise_routes"),
+      requestBatteryExemption: () => health("request_battery_exemption"),
+      openAutostartSettings: () => health("open_autostart_settings"),
     },
   };
 }

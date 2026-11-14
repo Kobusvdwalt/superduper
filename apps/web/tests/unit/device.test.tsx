@@ -90,6 +90,59 @@ describe("this device", () => {
     expect(calls).toContainEqual({ operation: "RevokeDeviceClient", variables: { id: "c-old" } });
   });
 
+  test("explains and requests exercise route access", async () => {
+    const fake = fakeShell();
+    uninstall = fake.install();
+    renderApp("/settings/device");
+
+    expect(await screen.findByText(/“Allow all” does not include exercise routes/)).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Allow exercise routes" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Allow exercise routes" })).toBeNull(),
+    );
+    expect(fake.calls.map((call) => call.command)).toContain(
+      "plugin:health|request_exercise_routes",
+    );
+  });
+
+  test("background sync asks for the battery exemption and opens autostart settings", async () => {
+    const fake = fakeShell();
+    uninstall = fake.install();
+    renderApp("/settings/device");
+
+    expect(await screen.findByText(/Autostart is on for Super Duper/)).toBeDefined();
+    expect(screen.getByText("Optimised")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Stop optimising battery" }));
+    expect(await screen.findByText("Exempt")).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Stop optimising battery" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open autostart settings" }));
+    await waitFor(() =>
+      expect(fake.calls.map((call) => call.command)).toContain(
+        "plugin:health|open_autostart_settings",
+      ),
+    );
+  });
+
+  test("restricted background activity and a missing autostart screen are explained", async () => {
+    const status = androidStatus();
+    uninstall = fakeShell({
+      status: {
+        ...status,
+        power: {
+          batteryOptimization: "exempt",
+          backgroundRestricted: true,
+          autostartSettings: "unsupported",
+        },
+      },
+    }).install();
+    renderApp("/settings/device");
+
+    expect(await screen.findByText(/Background activity is restricted/)).toBeDefined();
+    expect(screen.getByText("No autostart setting on this phone")).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Open autostart settings" })).toBeNull();
+  });
+
   test("a revoked pairing asks to pair again", async () => {
     uninstall = fakeShell({
       status: androidStatus({

@@ -37,10 +37,15 @@ describe("shell commands", () => {
     await shell.health.syncNow();
     await shell.health.setAutoSync(false);
     const after = await shell.health.setHistoryDays(30);
+    const routes = await shell.health.requestExerciseRoutes();
+    const exempt = await shell.health.requestBatteryExemption();
+    await shell.health.openAutostartSettings();
     await shell.health.unpair();
 
     expect(paired.pairing).toMatchObject({ paired: true, clientId: "c1" });
     expect(after.settings).toEqual({ autoSync: false, historyDays: 30 });
+    expect(routes.permissions.exerciseRoutes).toBe("granted");
+    expect(exempt.power.batteryOptimization).toBe("exempt");
     expect(fake.calls).toEqual([
       { command: "shell_info", args: undefined },
       { command: "get_server_url", args: undefined },
@@ -52,6 +57,9 @@ describe("shell commands", () => {
       { command: "plugin:health|sync_now", args: undefined },
       { command: "plugin:health|set_auto_sync", args: { enabled: false } },
       { command: "plugin:health|set_history_days", args: { days: 30 } },
+      { command: "plugin:health|request_exercise_routes", args: undefined },
+      { command: "plugin:health|request_battery_exemption", args: undefined },
+      { command: "plugin:health|open_autostart_settings", args: undefined },
       { command: "plugin:health|unpair", args: undefined },
     ]);
   });
@@ -61,6 +69,17 @@ describe("shell commands", () => {
     const error = await shell?.health.syncNow().catch((reason: unknown) => reason);
     expect(error).toBeInstanceOf(ShellError);
     expect(error).toMatchObject({ code: "NOT_PAIRED", message: "Pair this device first." });
+  });
+
+  test("an UNSUPPORTED rejection keeps its code", async () => {
+    const status = androidStatus();
+    const shell = detectShell(
+      fakeShell({
+        status: { ...status, power: { ...status.power, autostartSettings: "unsupported" } },
+      }).target,
+    );
+    const error = await shell?.health.openAutostartSettings().catch((reason: unknown) => reason);
+    expect(error).toMatchObject({ code: "UNSUPPORTED", message: "No autostart settings screen." });
   });
 
   test("a plain-string rejection from the access-control layer becomes REFUSED", async () => {
