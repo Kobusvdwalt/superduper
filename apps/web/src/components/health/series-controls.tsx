@@ -12,8 +12,11 @@ export type SeriesControlValues = {
   to: string;
   bucket: HealthBucket;
   origin: string | null;
+  sources: "ALL" | null;
   aggregation?: HealthAggregation;
 };
+
+const ALL_SOURCES = "*all";
 
 const PRESETS = [7, 28, 90, 365] as const;
 
@@ -103,11 +106,49 @@ export function SeriesControls({
           </NativeSelect>
         </div>
       ) : null}
-      <OriginSelect
+      <SourceSelect
         origins={origins}
-        value={value.origin}
-        onChange={(origin) => onChange({ origin })}
+        origin={value.origin}
+        sources={value.sources}
+        onChange={onChange}
       />
+    </div>
+  );
+}
+
+/** For cumulative metrics the default is one source per day; see `sourceMode` in the API. */
+function SourceSelect({
+  origins,
+  origin,
+  sources,
+  onChange,
+}: {
+  origins: string[];
+  origin: string | null;
+  sources: "ALL" | null;
+  onChange: (patch: { origin: string | null; sources: "ALL" | null }) => void;
+}) {
+  const value = origin ?? (sources === "ALL" ? ALL_SOURCES : "");
+  return (
+    <div className="flex flex-col gap-1">
+      <Label htmlFor="data-origin">Data origin</Label>
+      <NativeSelect
+        id="data-origin"
+        value={value}
+        onChange={(event) => {
+          const next = event.target.value;
+          if (next === ALL_SOURCES) onChange({ origin: null, sources: "ALL" });
+          else onChange({ origin: next || null, sources: null });
+        }}
+      >
+        <NativeSelectOption value="">Preferred source per day</NativeSelectOption>
+        <NativeSelectOption value={ALL_SOURCES}>All sources (may double count)</NativeSelectOption>
+        {origins.map((item) => (
+          <NativeSelectOption key={item} value={item}>
+            {item}
+          </NativeSelectOption>
+        ))}
+      </NativeSelect>
     </div>
   );
 }
