@@ -1,0 +1,40 @@
+{
+  "$schema": "../../node_modules/oxlint/configuration_schema.json",
+  "extends": ["../../.oxlintrc.json"],
+  "rules": {
+    "unicorn/prefer-node-protocol": "error",
+    "no-restricted-properties": [
+      "error",
+      { "object": "process", "property": "env", "message": "Read configuration in src/env.ts." },
+      { "object": "Bun", "property": "env", "message": "Read configuration in src/env.ts." }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["src/env.ts"],
+      "rules": { "no-restricted-properties": "off" }
+    },
+    {
+      "files": ["src/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [{ "name": "bun:test", "message": "Test code lives in tests/." }],
+            "patterns": [
+              { "group": ["**/tests/**"], "message": "Production code cannot import tests." }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["tests/**"],
+      "rules": { "typescript/await-thenable": "off" }
+    },
+    {
+      "files": ["scripts/**"],
+      "rules": { "no-console": "off" }
+    }
+  ]
+}

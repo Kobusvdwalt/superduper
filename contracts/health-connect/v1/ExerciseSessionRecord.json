@@ -1,0 +1,106 @@
+{
+  "origin": "HEALTH_CONNECT",
+  "recordType": "ExerciseSessionRecord",
+  "sourceRecordId": "00000000-0000-4000-8000-000000000014",
+  "dataOrigin": "com.example.fitness",
+  "startTime": "2026-11-10T05:30:00Z",
+  "endTime": "2026-11-10T06:10:00Z",
+  "startZoneOffsetSeconds": 7200,
+  "endZoneOffsetSeconds": 7200,
+  "modifiedAt": "2026-11-10T09:00:00Z",
+  "payload": {
+    "startTime": "2026-11-10T05:30:00Z",
+    "startZoneOffsetSeconds": 7200,
+    "endTime": "2026-11-10T06:10:00Z",
+    "endZoneOffsetSeconds": 7200,
+    "exerciseType": 56,
+    "exerciseTypeName": "RUNNING",
+    "title": "Morning run",
+    "notes": "Synthetic example",
+    "segments": [
+      {
+        "startTime": "2026-11-10T05:30:00Z",
+        "endTime": "2026-11-10T06:05:00Z",
+        "segmentType": 46,
+        "segmentTypeName": "RUNNING",
+        "repetitions": 0
+      },
+      {
+        "startTime": "2026-11-10T06:05:00Z",
+        "endTime": "2026-11-10T06:10:00Z",
+        "segmentType": 64,
+        "segmentTypeName": "WALKING",
+        "repetitions": 0
+      }
+    ],
+    "laps": [
+      {
+        "startTime": "2026-11-10T05:30:00Z",
+        "endTime": "2026-11-10T05:36:00Z",
+        "length": {
+          "value": 1000.0,
+          "unit": "meters"
+        }
+      },
+      {
+        "startTime": "2026-11-10T05:36:00Z",
+        "endTime": "2026-11-10T05:42:10Z",
+        "length": {
+          "value": 1000.0,
+          "unit": "meters"
+        }
+      }
+    ],
+    "exerciseRouteResult": {
+      "type": "Data",
+      "exerciseRoute": {
+        "route": [
+          {
+            "time": "2026-11-10T05:30:00Z",
+            "latitude": -33.9249,
+            "longitude": 18.4241,
+            "horizontalAccuracy": {
+              "value": 4.0,
+              "unit": "meters"
+            },
+            "verticalAccuracy": {
+              "value": 6.0,
+              "unit": "meters"
+            },
+            "altitude": {
+              "value": 12.0,
+              "unit": "meters"
+            }
+          },
+          {
+            "time": "2026-11-10T05:30:10Z",
+            "latitude": -33.9251,
+            "longitude": 18.4244,
+            "horizontalAccuracy": {
+              "value": 3.5,
+              "unit": "meters"
+            },
+            "verticalAccuracy": null,
+            "altitude": null
+          }
+        ]
+      }
+    },
+    "plannedExerciseSessionId": null,
+    "metadata": {
+      "id": "00000000-0000-4000-8000-000000000014",
+      "dataOrigin": "com.example.fitness",
+      "lastModifiedTime": "2026-11-10T09:00:00Z",
+      "clientRecordId": null,
+      "clientRecordVersion": 0,
+      "recordingMethod": 1,
+      "recordingMethodName": "ACTIVELY_RECORDED",
+      "device": {
+        "manufacturer": "Example",
+        "model": "Watch 1",
+        "type": 1,
+        "typeName": "WATCH"
+      }
+    }
+  }
+}

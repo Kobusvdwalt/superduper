@@ -1,0 +1,31 @@
+{
+  "origin": "HEALTH_CONNECT",
+  "recordType": "HeartRateVariabilityRmssdRecord",
+  "sourceRecordId": "00000000-0000-4000-8000-000000000017",
+  "dataOrigin": "com.example.fitness",
+  "startTime": "2026-11-10T03:00:00Z",
+  "endTime": null,
+  "startZoneOffsetSeconds": 7200,
+  "endZoneOffsetSeconds": null,
+  "modifiedAt": "2026-11-10T09:00:00Z",
+  "payload": {
+    "time": "2026-11-10T03:00:00Z",
+    "zoneOffsetSeconds": 7200,
+    "heartRateVariabilityMillis": 48.2,
+    "metadata": {
+      "id": "00000000-0000-4000-8000-000000000017",
+      "dataOrigin": "com.example.fitness",
+      "lastModifiedTime": "2026-11-10T09:00:00Z",
+      "clientRecordId": null,
+      "clientRecordVersion": 0,
+      "recordingMethod": 2,
+      "recordingMethodName": "AUTOMATICALLY_RECORDED",
+      "device": {
+        "manufacturer": "Example",
+        "model": "Watch 1",
+        "type": 1,
+        "typeName": "WATCH"
+      }
+    }
+  }
+}

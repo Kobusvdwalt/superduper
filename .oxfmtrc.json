@@ -1,0 +1,7 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 100,
+  "sortPackageJson": false,
+  "sortImports": {},
+  "ignorePatterns": ["apps/app/**", "**/drizzle/**", "**/schema.graphql", "bun.lock"]
+}

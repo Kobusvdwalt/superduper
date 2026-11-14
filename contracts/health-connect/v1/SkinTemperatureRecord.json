@@ -1,0 +1,54 @@
+{
+  "origin": "HEALTH_CONNECT",
+  "recordType": "SkinTemperatureRecord",
+  "sourceRecordId": "00000000-0000-4000-8000-000000000033",
+  "dataOrigin": "com.example.fitness",
+  "startTime": "2026-11-09T22:00:00Z",
+  "endTime": "2026-11-10T05:00:00Z",
+  "startZoneOffsetSeconds": 7200,
+  "endZoneOffsetSeconds": 7200,
+  "modifiedAt": "2026-11-10T09:00:00Z",
+  "payload": {
+    "startTime": "2026-11-09T22:00:00Z",
+    "startZoneOffsetSeconds": 7200,
+    "endTime": "2026-11-10T05:00:00Z",
+    "endZoneOffsetSeconds": 7200,
+    "deltas": [
+      {
+        "time": "2026-11-09T23:00:00Z",
+        "delta": {
+          "value": -0.2,
+          "unit": "celsius"
+        }
+      },
+      {
+        "time": "2026-11-10T02:00:00Z",
+        "delta": {
+          "value": 0.35,
+          "unit": "celsius"
+        }
+      }
+    ],
+    "baseline": {
+      "value": 33.9,
+      "unit": "celsius"
+    },
+    "measurementLocation": 3,
+    "measurementLocationName": "WRIST",
+    "metadata": {
+      "id": "00000000-0000-4000-8000-000000000033",
+      "dataOrigin": "com.example.fitness",
+      "lastModifiedTime": "2026-11-10T09:00:00Z",
+      "clientRecordId": null,
+      "clientRecordVersion": 0,
+      "recordingMethod": 2,
+      "recordingMethodName": "AUTOMATICALLY_RECORDED",
+      "device": {
+        "manufacturer": "Example",
+        "model": "Watch 1",
+        "type": 1,
+        "typeName": "WATCH"
+      }
+    }
+  }
+}

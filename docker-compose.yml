@@ -1,0 +1,70 @@
+# docker compose up --build --watch
+#
+# Reads default.env, then .env if present. Host ports come from PORT_*; inside the network
+# the API is api:4400 and Postgres is postgres:5432.
+
+name: ${COMPOSE_PROJECT_NAME:-superduper}
+
+services:
+  postgres:
+    image: postgres:18
+    ports:
+      - "${PORT_POSTGRES:-54400}:5432"
+    environment:
+      POSTGRES_USER: superduper
+      POSTGRES_PASSWORD: superduper
+      POSTGRES_DB: superduper
+    volumes:
+      # Postgres 18 images keep the cluster in a versioned directory under /var/lib/postgresql.
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U superduper -d superduper"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/dev.Dockerfile
+    ports:
+      - "${PORT_API:-4400}:4400"
+    env_file:
+      - path: default.env
+      - path: .env
+        required: false
+    environment:
+      API_PORT: "4400"
+      DATABASE_URL: postgres://superduper:superduper@postgres:5432/superduper
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:${PORT_API:-4400}}
+      AUTH_TRUSTED_ORIGINS: ${AUTH_TRUSTED_ORIGINS:-http://localhost:${PORT_WEB:-4401}}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "fetch('http://localhost:4400/api/healthz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))",
+        ]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    develop:
+      watch:
+        - action: sync
+          path: ./apps/api/src
+          target: /repo/apps/api/src
+        - action: sync+restart
+          path: ./apps/api/drizzle
+          target: /repo/apps/api/drizzle
+        - action: rebuild
+          path: ./apps/api/package.json
+        - action: rebuild
+          path: ./bun.lock
+
+volumes:
+  pgdata:

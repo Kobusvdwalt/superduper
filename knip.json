@@ -1,0 +1,15 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": [],
+      "project": []
+    },
+    "apps/api": {
+      "entry": ["scripts/*.ts", "tests/**/*.test.ts"],
+      "project": ["src/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts"],
+      "oxlint": { "config": [".oxlintrc.json"] }
+    }
+  },
+  "treatConfigHintsAsErrors": true
+}
