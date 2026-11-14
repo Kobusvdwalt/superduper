@@ -62,6 +62,17 @@ describe("app", () => {
     expect(screen.getByRole("button", { name: "Create account" })).toBeDefined();
   });
 
+  test("signing in lands on the page the user asked for", async () => {
+    const { router } = renderApp("/settings/device", { signedIn: false });
+    fireEvent.change(await screen.findByLabelText("Email"), {
+      target: { value: "owner@example.com" },
+    });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "correct horse" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/settings/device"));
+    expect(await screen.findByText("Only available in the app")).toBeDefined();
+  });
+
   test("the overview shows coverage and charts each metric with a fitting aggregation", async () => {
     const { calls } = renderApp("/health", {
       responses: { Coverage: COVERAGE, QuantitySeries: SERIES },

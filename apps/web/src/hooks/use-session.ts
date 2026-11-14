@@ -12,7 +12,9 @@ function useAfterAuthChange() {
   const router = useRouter();
   return async () => {
     queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== "auth" });
-    await queryClient.invalidateQueries({ queryKey: sessionQuery.queryKey });
+    // The sign-in page reads the session only in `beforeLoad`, so nothing observes the query
+    // there and a plain invalidation would leave the stale signed-out value in the cache.
+    await queryClient.invalidateQueries({ queryKey: sessionQuery.queryKey, refetchType: "all" });
     await router.invalidate();
   };
 }
