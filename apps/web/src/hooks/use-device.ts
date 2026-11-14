@@ -35,13 +35,23 @@ export function useShell(): Shell | null {
   return shell;
 }
 
+/**
+ * A pending retry runs in the background without telling the page, so the status is polled
+ * until it is gone; otherwise the panel keeps showing the failure it replaced.
+ */
+export function statusRefetchInterval(status: HealthStatus | undefined): number | false {
+  if (status?.sync.running) return 2_000;
+  if (status?.sync.nextRetryAt) return 10_000;
+  return false;
+}
+
 export function useHealthStatus(shell: Shell | null) {
   return useQuery({
     queryKey: STATUS_KEY,
     queryFn: () => (shell as Shell).health.status(),
     enabled: shell !== null,
     staleTime: 0,
-    refetchInterval: (query) => (query.state.data?.sync.running ? 2_000 : false),
+    refetchInterval: (query) => statusRefetchInterval(query.state.data),
   });
 }
 

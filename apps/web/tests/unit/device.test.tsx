@@ -2,6 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 
+import { statusRefetchInterval } from "@/hooks/use-device";
+
 import { renderApp } from "../support/app";
 import { androidStatus, fakeShell } from "../support/fake-shell";
 
@@ -151,5 +153,18 @@ describe("this device", () => {
     renderApp("/settings/device");
     expect(await screen.findByText(/rejected this device's token/)).toBeDefined();
     expect(screen.getByRole("button", { name: "Pair again" })).toBeDefined();
+  });
+
+  test("the status is polled while a sync runs or a retry is pending, not when idle", () => {
+    const idle = androidStatus();
+    expect(statusRefetchInterval(undefined)).toBe(false);
+    expect(statusRefetchInterval(idle)).toBe(false);
+    expect(statusRefetchInterval({ ...idle, sync: { ...idle.sync, running: true } })).toBe(2_000);
+    expect(
+      statusRefetchInterval({
+        ...idle,
+        sync: { ...idle.sync, nextRetryAt: "2026-11-15T00:00:00Z" },
+      }),
+    ).toBe(10_000);
   });
 });
