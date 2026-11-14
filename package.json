@@ -8,6 +8,7 @@
   ],
   "scripts": {
     "check": "bun run check:root && bun run --filter '@superduper/*' check",
+    "check:ci": "bun run check:root && bun run --filter '@superduper/*' --filter '!@superduper/app' check",
     "check:root": "bun run format:check",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
