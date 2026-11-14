@@ -1,0 +1,6 @@
+# Acceptance overrides, merged over values.yaml when CI renders chart_deployment/acc.
+env: acc
+ingress_host: superduper.cluster.vigil-acc.tiental.net
+secret_store_name: namespace-vault-cluster-superduper-acc
+pghost: vigil-acc-postgres.postgres.database.azure.com
+auth_trusted_origins: https://superduper.cluster.vigil-acc.tiental.net

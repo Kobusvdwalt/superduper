@@ -1,0 +1,27 @@
+# CI/CD config for Tiental workflows:
+# https://github.com/Tiental/workflows/blob/main/docs/spec.md
+# Inactive until the repository moves to the Tiental organisation; see docs/deployment.md.
+version: 2
+
+defaults:
+  runsOn: ubuntu-latest
+  tools:
+    bun: 1.4.4
+
+sources:
+  - .github/project-config.yaml
+  - .github/workflows/pipeline.yml
+  - package.json
+  - bun.lock
+  - tsconfig.base.json
+
+apps:
+  - path: apps/api
+    sources: [chart/**, tests/chart/**]
+  - path: apps/web
+
+environments:
+  - name: acc
+    deploy:
+      trigger: merge
+      branch: main
