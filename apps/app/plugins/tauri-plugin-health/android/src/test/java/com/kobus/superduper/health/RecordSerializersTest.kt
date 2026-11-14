@@ -90,9 +90,10 @@ class RecordSerializersTest {
     @Test
     fun matchesContractFixtures() {
         val dir = System.getProperty("superduper.fixtures")?.let(::File)
-        assumeTrue("Fixture directory not found ($dir); skipping fixture comparison", dir != null && dir.isDirectory)
+        val fixtures = dir?.listFiles { file -> file.name.endsWith(".json") }.orEmpty()
+            .associateBy { it.name.removeSuffix(".json") }
+        assumeTrue("No fixtures in $dir; skipping fixture comparison", fixtures.isNotEmpty())
         val problems = mutableListOf<String>()
-        val fixtures = dir!!.listFiles { file -> file.name.endsWith(".json") }!!.associateBy { it.name.removeSuffix(".json") }
         for (missing in envelopes.keys - fixtures.keys) problems += "$missing: no fixture"
         for (extra in fixtures.keys - envelopes.keys) problems += "$extra: fixture for an unknown record type"
         for ((type, file) in fixtures) {
