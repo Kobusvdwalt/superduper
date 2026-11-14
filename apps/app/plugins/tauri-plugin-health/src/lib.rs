@@ -78,11 +78,12 @@ impl<R: Runtime> Health<R> {
 fn unavailable_status() -> Value {
     json!({
         "platform": std::env::consts::OS,
+        "androidSdk": null,
         "availability": "unsupported_platform",
         "permissions": {
-            "requested": [],
             "granted": [],
             "missing": [],
+            "unsupported": [],
             "allRecordTypesGranted": false,
             "background": "unsupported",
             "history": "unsupported",
@@ -154,7 +155,12 @@ async fn pair<R: Runtime>(
     health
         .call(
             "pair",
-            json!({ "serverUrl": server, "shellServerUrl": server, "token": token, "clientId": client_id }),
+            json!({
+                "serverUrl": server,
+                "shellServerUrl": server,
+                "token": token,
+                "clientId": client_id,
+            }),
         )
         .await
 }
