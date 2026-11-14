@@ -12,9 +12,9 @@ import androidx.work.WorkerParameters
 import java.util.concurrent.TimeUnit
 
 class HealthSyncWorker(context: Context, parameters: WorkerParameters) : CoroutineWorker(context, parameters) {
-    override suspend fun doWork(): Result = when (SyncEngine.run(applicationContext, Trigger.BACKGROUND)) {
-        is DrainResult.Interrupted -> Result.retry()
-        else -> Result.success()
+    override suspend fun doWork(): Result {
+        val outcome = SyncEngine.run(applicationContext, Trigger.BACKGROUND)
+        return if (outcome.retryLater || outcome.drain is DrainResult.Interrupted) Result.retry() else Result.success()
     }
 
     companion object {

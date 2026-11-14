@@ -154,7 +154,7 @@ async fn pair<R: Runtime>(
     health
         .call(
             "pair",
-            json!({ "serverUrl": server, "token": token, "clientId": client_id }),
+            json!({ "serverUrl": server, "shellServerUrl": server, "token": token, "clientId": client_id }),
         )
         .await
 }

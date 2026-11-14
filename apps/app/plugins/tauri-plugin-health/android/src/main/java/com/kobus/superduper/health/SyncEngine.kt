@@ -27,6 +27,14 @@ internal enum class Trigger { FOREGROUND, BACKGROUND }
 internal class NeedsRepair(message: String) : Exception(message)
 private class QueueBackedUp(message: String) : Exception(message)
 
+/** [retryLater] asks WorkManager to back off and run again, for example after a quota error. */
+internal class RunResult(val drain: DrainResult?, val retryLater: Boolean)
+
+// Health Connect reports its read quota as a RemoteException (APK provider) or a
+// HealthConnectException (platform) whose message names the quota; there is no typed error.
+private fun Throwable.isRateLimit(): Boolean =
+    generateSequence(this) { it.cause }.any { it.message?.contains("quota", ignoreCase = true) == true }
+
 /**
  * Without READ_HEALTH_DATA_HISTORY, Health Connect only returns data from 30 days before the
  * first grant, so the last 30 days are the only window that is always readable.
@@ -40,9 +48,8 @@ internal class HistoryWindow(private val days: Int, private val historyGranted: 
 
 internal object SyncEngine {
     private const val TAG = "SuperDuperHealth"
-    private const val PAGE_SIZE = 500
+    private const val PAGE_SIZE = 1000
     private const val QUEUE_HIGH_WATER = 20L
-    private val SLICE_MILLIS = TimeUnit.DAYS.toMillis(90)
     const val DEFAULT_HISTORY_DAYS = 3650
 
     private val mutex = Mutex()
@@ -88,13 +95,14 @@ internal object SyncEngine {
         if (platformDefines(context, HealthRecordTypes.EXERCISE_ROUTES_PERMISSION)) add(HealthRecordTypes.EXERCISE_ROUTES_PERMISSION)
     }
 
-    suspend fun run(context: Context, trigger: Trigger): DrainResult? = mutex.withLock {
+    suspend fun run(context: Context, trigger: Trigger): RunResult = mutex.withLock {
         val db = SyncDatabase.get(context)
-        val connection = db.connection() ?: return null
-        if (db.setting("needsRepair") == "true") return null
+        val connection = db.connection() ?: return RunResult(null, false)
+        if (db.setting("needsRepair") == "true") return RunResult(null, false)
         running = true
         val errors = mutableListOf<String>()
         var result: DrainResult? = null
+        var retryLater = false
         try {
             db.setSetting("lastAttemptAt", Instant.now().toString())
             if (trigger == Trigger.FOREGROUND) db.retryRejected()
@@ -143,6 +151,12 @@ internal object SyncEngine {
                             db.setTypeError(type.name, "Permission denied")
                             errors += "${type.name}: permission denied"
                         } catch (error: Exception) {
+                            if (error.isRateLimit()) {
+                                db.setTypeError(type.name, "Health Connect read quota reached")
+                                errors += "Health Connect read quota reached; reading resumes on the next sync"
+                                retryLater = true
+                                break
+                            }
                             Log.w(TAG, "Reading ${type.name} failed", error)
                             val message = "${error.javaClass.simpleName}: ${error.message ?: ""}".trim()
                             db.setTypeError(type.name, message)
@@ -169,7 +183,7 @@ internal object SyncEngine {
             running = false
             phase = null
         }
-        result
+        RunResult(result, retryLater)
     }
 
     private class Read(val type: HealthRecordType, val record: Record) {
@@ -223,8 +237,9 @@ internal object SyncEngine {
     }
 
     /**
-     * Reads the history window newest first in 90-day slices, persisting progress after each
-     * slice so a backfill interrupted by quota or process death resumes where it stopped.
+     * Reads the history window newest first in one paged query. After each page the oldest
+     * start time read is saved, so a backfill interrupted by quota or process death resumes
+     * from there with a new query (records at that instant are read again and deduplicated).
      */
     private suspend fun backfill(
         client: HealthConnectClient,
@@ -243,32 +258,33 @@ internal object SyncEngine {
                 startedAt = now,
             ).also { db.saveBackfill(type.name, it) }
         }
-        while (state.nextEnd > state.windowStart) {
-            val sliceStart = maxOf(state.windowStart, state.nextEnd - SLICE_MILLIS)
-            var pageToken: String? = null
-            do {
-                val page = client.readRecords(
-                    ReadRecordsRequest(
-                        recordType = type.recordClass,
-                        timeRangeFilter = TimeRangeFilter.between(Instant.ofEpochMilli(sliceStart), Instant.ofEpochMilli(state.nextEnd)),
-                        pageSize = PAGE_SIZE,
-                        pageToken = pageToken,
-                    ),
-                )
-                val reads = page.records.map { Read(type, it) }
-                db.commit(
-                    type.name,
-                    Batches.build(changed(db, reads), emptyList()),
-                    seen = reads.map { it.entry },
-                    scan = state.scan,
-                    removed = emptyList(),
-                )
-                afterCommit()
-                pageToken = page.pageToken?.takeIf { it.isNotEmpty() }
-            } while (pageToken != null)
-            state = Backfill(state.token, state.scan, state.windowStart, sliceStart, state.startedAt)
-            db.saveBackfill(type.name, state)
-        }
+        var pageToken: String? = null
+        do {
+            val page = client.readRecords(
+                ReadRecordsRequest(
+                    recordType = type.recordClass,
+                    timeRangeFilter = TimeRangeFilter.between(Instant.ofEpochMilli(state.windowStart), Instant.ofEpochMilli(state.nextEnd)),
+                    ascendingOrder = false,
+                    pageSize = PAGE_SIZE,
+                    pageToken = pageToken,
+                ),
+            )
+            val reads = page.records.map { Read(type, it) }
+            pageToken = page.pageToken?.takeIf { it.isNotEmpty() }
+            val oldest = reads.minOfOrNull { it.entry.startTime }
+            if (pageToken != null && oldest != null) {
+                state = Backfill(state.token, state.scan, state.windowStart, minOf(state.nextEnd, oldest + 1), state.startedAt)
+            }
+            db.commit(
+                type.name,
+                Batches.build(changed(db, reads), emptyList()),
+                seen = reads.map { it.entry },
+                scan = state.scan,
+                removed = emptyList(),
+                backfill = state,
+            )
+            afterCommit()
+        } while (pageToken != null)
         // A record outside what this scan could read must not be reported as deleted: the API
         // never lets an older record undo a deletion.
         val missing = db.missing(type.name, maxOf(state.windowStart, window.start(state.startedAt)), state.startedAt, state.scan)
