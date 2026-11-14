@@ -245,6 +245,9 @@ type HealthQuery {
     to: DateTime!
   ): HealthQuantitySeries!
 
+  """One stored record, deleted ones included; null if it does not exist."""
+  rawRecord(id: UUID!): HealthRawRecord
+
   """Stored records with their payloads, in start-time order."""
   rawRecords(
     after: String
@@ -266,6 +269,7 @@ type HealthQuery {
 
   """Coverage per raw record type and data origin, raw-only types included."""
   recordTypes: [HealthRecordTypeCoverage!]!
+  sleepSession(id: UUID!): HealthSleepSession
   sleepSessions(
     after: String
 
@@ -284,6 +288,7 @@ type HealthQuery {
 
   """Applied batches, newest first."""
   syncBatches(after: String, clientId: UUID, limit: Int): HealthSyncBatchPage!
+  workout(id: UUID!): HealthWorkout
   workouts(
     after: String
 
@@ -323,6 +328,11 @@ type HealthRawRecord {
   sourceRecordId: String!
   startTime: DateTime!
   startZoneOffsetSeconds: Int
+
+  """
+  Every version received for this record's source identity, oldest first.
+  """
+  versions: [HealthRawRecordVersion!]!
 }
 
 type HealthRawRecordPage {
@@ -330,6 +340,20 @@ type HealthRawRecordPage {
 
   """Pass as `after` for the next page; null on the last page."""
   nextCursor: String
+}
+
+"""One distinct version of a record or deletion as received."""
+type HealthRawRecordVersion {
+  """Whether this version became the current state when it arrived."""
+  applied: Boolean!
+  deletedAt: DateTime
+  id: UUID!
+  modifiedAt: DateTime
+  operation: HealthRecordOperation!
+  payload: JSON
+  receivedAt: DateTime!
+  schemaVersion: Int!
+  syncBatchId: UUID!
 }
 
 input HealthRecordDeletionInput {
@@ -353,6 +377,11 @@ input HealthRecordInput {
   sourceRecordId: String!
   startTime: DateTime!
   startZoneOffsetSeconds: Int
+}
+
+enum HealthRecordOperation {
+  DELETE
+  UPSERT
 }
 
 type HealthRecordTypeCoverage {
