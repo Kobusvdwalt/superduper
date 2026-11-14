@@ -8,7 +8,21 @@
     "apps/api": {
       "entry": ["scripts/*.ts", "tests/**/*.test.ts"],
       "project": ["src/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts"],
-      "oxlint": { "config": [".oxlintrc.json"] }
+      "oxlint": {
+        "config": [".oxlintrc.json"]
+      }
+    },
+    "apps/web": {
+      "entry": [
+        "src/routes/**/*.tsx",
+        "src/components/ui/*.tsx",
+        "tests/**/*.test.{ts,tsx}",
+        "tests/support/*.ts"
+      ],
+      "project": ["src/**/*.{ts,tsx,css}", "server/**/*.ts", "tests/**/*.{ts,tsx}"],
+      "oxlint": {
+        "config": [".oxlintrc.json"]
+      }
     }
   },
   "treatConfigHintsAsErrors": true

@@ -1,0 +1,19 @@
+{
+  "$schema": "../../node_modules/oxlint/configuration_schema.json",
+  "extends": ["../../.oxlintrc.json"],
+  "plugins": ["typescript", "unicorn", "oxc", "import", "react"],
+  "ignorePatterns": ["src/gql", "src/routeTree.gen.ts", "dist", "server-dist"],
+  "rules": {
+    "react/rules-of-hooks": "error",
+    "react/exhaustive-deps": "error",
+    "typescript/only-throw-error": [
+      "error",
+      {
+        "allow": [
+          { "from": "package", "package": "@tanstack/router-core", "name": "Redirect" },
+          { "from": "package", "package": "@tanstack/router-core", "name": "NotFoundError" }
+        ]
+      }
+    ]
+  }
+}
