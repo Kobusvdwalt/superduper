@@ -10,6 +10,8 @@
     ".github/workflows/pipeline.yml",
     "**/drizzle/**",
     "**/schema.graphql",
-    "bun.lock"
+    "bun.lock",
+    "apps/web/src/gql/**",
+    "apps/web/src/routeTree.gen.ts"
   ]
 }

@@ -21,6 +21,7 @@ import {
   healthNutritionEntries,
   healthQuantitySamples,
   healthRawRecords,
+  healthRawRecordVersions,
   healthSleepSessions,
   healthSleepStages,
   healthWorkoutLaps,
@@ -276,6 +277,51 @@ export async function listRawRecords(
     .orderBy(asc(t.startTime), asc(t.id))
     .limit(limit + 1);
   return toPage(rows, limit, byStart);
+}
+
+export async function getRawRecord(db: Database, userId: string, id: string) {
+  const t = healthRawRecords;
+  const [row] = await db
+    .select()
+    .from(t)
+    .where(and(eq(t.userId, userId), eq(t.id, id)));
+  return row ?? null;
+}
+
+/** Every version received for the record's source identity, oldest first. */
+export function listRawRecordVersions(db: Database, record: typeof healthRawRecords.$inferSelect) {
+  const t = healthRawRecordVersions;
+  return db
+    .select()
+    .from(t)
+    .where(
+      and(
+        eq(t.userId, record.userId),
+        eq(t.clientId, record.clientId),
+        eq(t.origin, record.origin),
+        eq(t.recordType, record.recordType),
+        eq(t.sourceRecordId, record.sourceRecordId),
+      ),
+    )
+    .orderBy(asc(t.receivedAt), asc(t.id));
+}
+
+export async function getSleepSession(db: Database, userId: string, id: string) {
+  const t = healthSleepSessions;
+  const [row] = await db
+    .select()
+    .from(t)
+    .where(and(eq(t.userId, userId), eq(t.id, id)));
+  return row ?? null;
+}
+
+export async function getWorkout(db: Database, userId: string, id: string) {
+  const t = healthWorkouts;
+  const [row] = await db
+    .select()
+    .from(t)
+    .where(and(eq(t.userId, userId), eq(t.id, id)));
+  return row ?? null;
 }
 
 export function metricCoverage(db: Database, userId: string) {

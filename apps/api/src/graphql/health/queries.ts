@@ -2,6 +2,9 @@ import { builder } from "../builder";
 import { requireViewer } from "../context";
 import {
   clientSyncs,
+  getRawRecord,
+  getSleepSession,
+  getWorkout,
   listNutritionEntries,
   listQuantitySamples,
   listRawRecords,
@@ -23,10 +26,13 @@ import {
   QuantitySamplePage,
   QuantitySeriesType,
   RawRecordPage,
+  RawRecordType,
   RecordTypeCoverageType,
   SleepSessionPage,
+  SleepSessionType,
   SyncBatchPage,
   WorkoutPage,
+  WorkoutType,
 } from "./types";
 
 builder.objectFields(Health.query, (t) => {
@@ -94,6 +100,25 @@ builder.objectFields(Health.query, (t) => {
         ...listArgs(),
       },
       resolve: (_root, args, ctx) => listRawRecords(ctx.db, requireViewer(ctx).userId, args),
+    }),
+    rawRecord: t.field({
+      type: RawRecordType,
+      nullable: true,
+      description: "One stored record, deleted ones included; null if it does not exist.",
+      args: { id: t.arg({ type: "UUID", required: true }) },
+      resolve: (_root, args, ctx) => getRawRecord(ctx.db, requireViewer(ctx).userId, args.id),
+    }),
+    sleepSession: t.field({
+      type: SleepSessionType,
+      nullable: true,
+      args: { id: t.arg({ type: "UUID", required: true }) },
+      resolve: (_root, args, ctx) => getSleepSession(ctx.db, requireViewer(ctx).userId, args.id),
+    }),
+    workout: t.field({
+      type: WorkoutType,
+      nullable: true,
+      args: { id: t.arg({ type: "UUID", required: true }) },
+      resolve: (_root, args, ctx) => getWorkout(ctx.db, requireViewer(ctx).userId, args.id),
     }),
     metrics: t.field({
       type: [MetricCoverageType],
