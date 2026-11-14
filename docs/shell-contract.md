@@ -13,7 +13,7 @@ origin, including a different port, has no IPC. In a normal browser none of this
 The shell defines a frozen global before any page script runs:
 
 ```ts
-window.__SUPERDUPER_SHELL__ // { shell: "superduper", platform: Platform, version: string } | undefined
+window.__SUPERDUPER_SHELL__; // { shell: "superduper", platform: Platform, version: string } | undefined
 
 type Platform = "android" | "linux" | "macos" | "windows";
 ```
@@ -43,10 +43,10 @@ No arguments.
 ```ts
 type ShellInfo = {
   shell: "superduper";
-  version: string;           // app version, e.g. "0.1.0"
+  version: string; // app version, e.g. "0.1.0"
   platform: Platform;
-  debug: boolean;            // debug build
-  plugins: string[];         // native plugins compiled in, currently ["health"]
+  debug: boolean; // debug build
+  plugins: string[]; // native plugins compiled in, currently ["health"]
 };
 ```
 
@@ -56,10 +56,10 @@ No arguments. Returns `ServerUrlState`.
 
 ```ts
 type ServerUrlState = {
-  url: string | null;                                   // the origin the shell loads, e.g. "https://sd.example.com"
-  source: "saved" | "build" | "development" | null;     // where `url` came from
-  defaultUrl: string | null;                            // what `set_server_url({ url: null })` falls back to
-  allowsLoopbackHttp: boolean;                          // true in debug builds only
+  url: string | null; // the origin the shell loads, e.g. "https://sd.example.com"
+  source: "saved" | "build" | "development" | null; // where `url` came from
+  defaultUrl: string | null; // what `set_server_url({ url: null })` falls back to
+  allowsLoopbackHttp: boolean; // true in debug builds only
 };
 ```
 
@@ -70,17 +70,20 @@ type ServerUrlState = {
 ### `set_server_url`
 
 ```ts
-{ url: string | null }
+{
+  url: string | null;
+}
 ```
 
 Validates and saves the server, then **navigates the window to the bundled setup page**,
 which reconnects to the new origin (or shows the form when it is unreachable). The promise may
 therefore never be observed by the calling page; do not depend on its result. `null` clears the
-saved URL and falls back to `defaultUrl`.
+saved URL and falls back to `defaultUrl`. When the caller does observe the result, it is the new
+`ServerUrlState`.
 
 Accepted values: a full URL that is only an origin (an optional trailing `/` is allowed; no
 path, query, fragment or credentials). `https://` only; in debug builds also `http://` to
-`localhost`, `127.0.0.1` or `[::1]`. Errors: `INVALID_ARGUMENT` with a user-facing message,
+`localhost`, a `127.0.0.0/8` address or `[::1]`. Errors: `INVALID_ARGUMENT` with a user-facing message,
 `INTERNAL` when the setting cannot be written.
 
 Changing the server does not move a health pairing: the phone keeps syncing to the origin it
@@ -99,18 +102,20 @@ start work (`pair`, `sync_now`, `request_permissions`) return before the sync fi
 events.
 
 On desktop every health command resolves (never rejects for being unsupported) with a status
-whose `availability` is `"unsupported_platform"`; nothing is stored.
+whose `availability` is `"unsupported_platform"`, `settings.autoSync` is `false` and
+`settings.historyDays` is `0`; nothing is stored. Argument checks still apply: `pair` and
+`set_history_days` reject `INVALID_ARGUMENT` (and `pair` rejects `FORBIDDEN`) as on Android.
 
-| Command | Arguments | Effect |
-| --- | --- | --- |
-| `plugin:health|status` | none | Reads the status. |
-| `plugin:health|request_permissions` | none | Opens Health Connect's permission screen for every readable record type plus background and history access, and resolves when the user returns. Starts a sync when paired. Rejects `UNAVAILABLE` when Health Connect is missing or needs an update. |
-| `plugin:health|open_health_connect` | none | Opens Health Connect settings, or its Play Store page when it is not installed or needs an update. |
-| `plugin:health|pair` | `{ token: string, clientId: string }` | Stores the client token, client id and the shell's current server origin natively (Android Keystore AES-GCM), schedules the hourly job when auto-sync is on and starts a sync. Pairing with a different `clientId` or server first deletes all local sync state, including unsent batches. |
-| `plugin:health|unpair` | none | Cancels background sync and deletes the token, cursors, record index and outgoing queue. Settings are kept. Data already on the server is untouched. |
-| `plugin:health|sync_now` | none | Starts a sync (upload the queue, read changes, upload again) and retries batches the server rejected earlier. Rejects `NOT_PAIRED` or `UNAUTHENTICATED`. |
-| `plugin:health|set_auto_sync` | `{ enabled: boolean }` | Turns the hourly background job on or off. Default `true`. |
-| `plugin:health|set_history_days` | `{ days: number }` | How far back the initial read goes, 1 to 36500 days. Default 3650. Changing it re-reads every type; records already sent are not sent again. |
+| Command                              | Arguments                             | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------------ | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `plugin:health\|status`              | none                                  | Reads the status.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `plugin:health\|request_permissions` | none                                  | Opens Health Connect's permission screen for every readable record type plus background and history access, and resolves when the user returns. Starts a sync when paired. Rejects `UNAVAILABLE` when Health Connect is missing or needs an update.                                                                                                                                                                                                                                                 |
+| `plugin:health\|open_health_connect` | none                                  | Opens Health Connect settings, or its Play Store page when it is not installed or needs an update.                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `plugin:health\|pair`                | `{ token: string, clientId: string }` | Stores the client token, client id and the shell's current server origin natively (Android Keystore AES-GCM), schedules the hourly job when auto-sync is on and starts a sync. Pairing with a different `clientId` or server first deletes all local sync state, including unsent batches. Rejects `INVALID_ARGUMENT` when `token` is shorter than 16 characters or contains whitespace, or `clientId` is empty or longer than 200 characters; `FORBIDDEN` when the shell has no server configured. |
+| `plugin:health\|unpair`              | none                                  | Cancels background sync and deletes the token, cursors, record index and outgoing queue. Settings are kept. Data already on the server is untouched.                                                                                                                                                                                                                                                                                                                                                |
+| `plugin:health\|sync_now`            | none                                  | Starts a sync (upload the queue, read changes, upload again). Rejects `NOT_PAIRED` or `UNAUTHENTICATED`.                                                                                                                                                                                                                                                                                                                                                                                            |
+| `plugin:health\|set_auto_sync`       | `{ enabled: boolean }`                | Turns the hourly background job on or off. Default `true`.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `plugin:health\|set_history_days`    | `{ days: number }`                    | How far back the initial read goes, 1 to 36500 days. Default 3650. Changing it re-reads every type; records already sent are not sent again. Rejects `INVALID_ARGUMENT` outside that range.                                                                                                                                                                                                                                                                                                         |
 
 ### Pairing flow
 
@@ -130,55 +135,55 @@ type Grant = "granted" | "denied" | "unsupported";
 
 type HealthStatus = {
   platform: Platform;
-  androidSdk: number | null;       // Android API level, null off Android
+  androidSdk: number | null; // Android API level, null off Android
   availability:
     | "available"
-    | "update_required"            // Health Connect not installed (Android 13 and lower) or too old
-    | "unavailable"                // device cannot run Health Connect
-    | "unsupported_platform";      // not Android
+    | "update_required" // Health Connect not installed (Android 13 and lower) or too old
+    | "unavailable" // device cannot run Health Connect
+    | "unsupported_platform"; // not Android
   permissions: {
-    granted: string[];             // record types readable now, e.g. "StepsRecord"
-    missing: string[];             // supported on this device but not granted
-    unsupported: string[];         // not supported by this device's Health Connect
+    granted: string[]; // record types readable now, e.g. "StepsRecord"
+    missing: string[]; // supported on this device but not granted
+    unsupported: string[]; // not supported by this device's Health Connect
     allRecordTypesGranted: boolean;
-    background: Grant;             // READ_HEALTH_DATA_IN_BACKGROUND
-    history: Grant;                // READ_HEALTH_DATA_HISTORY (older than 30 days)
-    exerciseRoutes: Grant;         // READ_EXERCISE_ROUTES (Android 15+; elsewhere routes need per-session consent and are sent as ConsentRequired)
+    background: Grant; // READ_HEALTH_DATA_IN_BACKGROUND
+    history: Grant; // READ_HEALTH_DATA_HISTORY (older than 30 days)
+    exerciseRoutes: Grant; // READ_EXERCISE_ROUTES (Android 15+; elsewhere routes need per-session consent and are sent as ConsentRequired)
   };
   pairing: {
     paired: boolean;
     clientId: string | null;
-    serverMatchesShell: boolean;   // paired origin equals the shell's current server
-    needsRepair: boolean;          // the server rejected the token; pair again
+    serverMatchesShell: boolean; // paired origin equals the shell's current server
+    needsRepair: boolean; // the server rejected the token; pair again
   };
   settings: {
-    autoSync: boolean;
-    historyDays: number;           // 0 off Android
+    autoSync: boolean; // false off Android
+    historyDays: number; // 0 off Android
   };
   sync: {
     running: boolean;
-    phase: string | null;          // human-readable, e.g. "Reading StepsRecord", "Uploading"
-    lastSuccessAt: string | null;  // ISO-8601; last run that finished without errors
+    phase: string | null; // human-readable, e.g. "Reading StepsRecord", "Uploading"
+    lastSuccessAt: string | null; // ISO-8601; last run that finished without errors
     lastAttemptAt: string | null;
-    lastError: string | null;      // human-readable summary of the last run's problems
-    queuedBatches: number;         // waiting for acknowledgement
+    lastError: string | null; // human-readable summary of the last run's problems
+    queuedBatches: number; // waiting for acknowledgement
     queuedRecords: number;
     queuedDeletions: number;
-    rejectedBatches: number;       // refused by the server (BAD_USER_INPUT, CONFLICT); retried by sync_now
-    types: TypeStatus[];           // one per Health Connect record type (all 41) on Android, empty elsewhere
+    rejectedBatches: number; // refused by the server (BAD_USER_INPUT, CONFLICT); retried by every foreground sync (sync_now, pair, request_permissions)
+    types: TypeStatus[]; // one per Health Connect record type (all 41) on Android, empty elsewhere
   };
 };
 
 type TypeStatus = {
-  recordType: string;              // e.g. "HeartRateRecord"
-  permission: string;              // Android permission name
+  recordType: string; // e.g. "HeartRateRecord"
+  permission: string; // Android permission name
   supported: boolean;
   granted: boolean;
   state: "unsupported" | "not_granted" | "not_started" | "backfilling" | "incremental";
-  backfill: { windowStart: string; readBackTo: string } | null;  // progress while backfilling
-  knownRecords: number;            // records of this type the phone has seen and sent or queued
+  backfill: { windowStart: string; readBackTo: string } | null; // progress while backfilling
+  knownRecords: number; // records of this type the phone has seen and sent or queued
   queuedRecords: number;
-  sentRecords: number;             // acknowledged by the server since pairing
+  sentRecords: number; // acknowledged by the server since pairing
   sentDeletions: number;
   lastReadAt: string | null;
   lastError: string | null;
@@ -196,18 +201,20 @@ A command rejects with:
 ```ts
 type ShellError = {
   code:
-    | "FORBIDDEN"          // the calling page is not the configured server origin
-    | "INVALID_ARGUMENT"   // bad argument; `message` is user-facing
-    | "UNAVAILABLE"        // Health Connect missing or needs an update
+    | "FORBIDDEN" // the calling page is not the configured server origin
+    | "INVALID_ARGUMENT" // bad argument; `message` is user-facing
+    | "UNAVAILABLE" // Health Connect missing or needs an update
     | "NOT_PAIRED"
-    | "UNAUTHENTICATED"    // pairing was rejected by the server; pair again
+    | "UNAUTHENTICATED" // pairing was rejected by the server; pair again
     | "INTERNAL";
   message: string;
 };
 ```
 
-When the Tauri access-control layer itself refuses a call (unknown command, or a page that
-was never granted IPC) the rejection is a plain `string`, not a `ShellError`. Handle both.
+When Tauri itself refuses a call the rejection is a plain `string`, not a `ShellError`: an
+unknown command, a page that was never granted IPC, or an argument that is missing or has the
+wrong JSON type (for example `set_history_days({ days: 1.5 })` or `{ days: -1 }`, since `days`
+is an unsigned integer). Handle both.
 
 ## Not provided
 
