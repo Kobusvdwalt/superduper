@@ -97,9 +97,8 @@ describe("this device", () => {
 
     expect(await screen.findByText(/“Allow all” does not include exercise routes/)).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Allow exercise routes" }));
-    await waitFor(() =>
-      expect(screen.queryByRole("button", { name: "Allow exercise routes" })).toBeNull(),
-    );
+    await waitFor(() => expect(fake.status.permissions.exerciseRoutes).toBe("granted"));
+    await waitFor(() => expect(screen.queryByText("Allow exercise routes") === null).toBe(true));
     expect(fake.calls.map((call) => call.command)).toContain(
       "plugin:health|request_exercise_routes",
     );
