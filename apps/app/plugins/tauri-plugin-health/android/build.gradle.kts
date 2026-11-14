@@ -23,6 +23,13 @@ android {
     }
     testOptions {
         unitTests.isReturnDefaultValues = true
+        unitTests.all { test ->
+            val fixtures = providers.gradleProperty("superduper.fixtures")
+                .orElse(providers.environmentVariable("SUPERDUPER_FIXTURES"))
+                .getOrElse(projectDir.resolve("../../../../../contracts/health-connect/v1").canonicalPath)
+            test.systemProperty("superduper.fixtures", fixtures)
+            test.testLogging { events("failed", "skipped"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
+        }
     }
 }
 

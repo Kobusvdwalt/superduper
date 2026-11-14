@@ -104,7 +104,7 @@ internal class SyncDatabase private constructor(context: Context) :
     /** Removes the connection and everything synced under it. Settings are kept. */
     fun wipeSyncState() = transaction {
         for (table in listOf("secrets", "cursors", "backfill", "record_index", "outbox", "type_stats")) delete(table, null, null)
-        delete("settings", "key IN ('lastSuccessAt','lastAttemptAt','lastError','needsRepair')", null)
+        delete("settings", "key IN ('lastSuccessAt','lastAttemptAt','lastError','needsRepair','historyGranted')", null)
     }
 
     fun cursor(type: String): String? =
@@ -244,6 +244,10 @@ internal class SyncDatabase private constructor(context: Context) :
 
     override fun reject(batchId: String, reason: String) {
         db.execSQL("UPDATE outbox SET state='rejected', attempts=attempts+1, last_error=? WHERE batch_id=?", arrayOf(reason, batchId))
+    }
+
+    fun retryRejected() {
+        db.execSQL("UPDATE outbox SET state='pending' WHERE state='rejected'")
     }
 
     override fun attemptFailed(batchId: String, reason: String) {

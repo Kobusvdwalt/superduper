@@ -27,11 +27,22 @@ internal enum class Trigger { FOREGROUND, BACKGROUND }
 internal class NeedsRepair(message: String) : Exception(message)
 private class QueueBackedUp(message: String) : Exception(message)
 
+/**
+ * Without READ_HEALTH_DATA_HISTORY, Health Connect only returns data from 30 days before the
+ * first grant, so the last 30 days are the only window that is always readable.
+ */
+internal class HistoryWindow(private val days: Int, private val historyGranted: Boolean) {
+    fun start(now: Long): Long {
+        val requested = now - TimeUnit.DAYS.toMillis(days.toLong())
+        return if (historyGranted) requested else maxOf(requested, now - TimeUnit.DAYS.toMillis(30))
+    }
+}
+
 internal object SyncEngine {
     private const val TAG = "SuperDuperHealth"
     private const val PAGE_SIZE = 500
     private const val QUEUE_HIGH_WATER = 20L
-    private val SLICE_MILLIS = TimeUnit.DAYS.toMillis(30)
+    private val SLICE_MILLIS = TimeUnit.DAYS.toMillis(90)
     const val DEFAULT_HISTORY_DAYS = 3650
 
     private val mutex = Mutex()
@@ -86,6 +97,7 @@ internal object SyncEngine {
         var result: DrainResult? = null
         try {
             db.setSetting("lastAttemptAt", Instant.now().toString())
+            if (trigger == Trigger.FOREGROUND) db.retryRejected()
             val uploader = Uploader(db, HttpTransport(connection.serverUrl + "/api/graphql", connection.token))
             fun drain(): DrainResult {
                 phase = "Uploading"
@@ -101,6 +113,13 @@ internal object SyncEngine {
                 val mayRead = trigger == Trigger.FOREGROUND || HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND in granted
                 if (!mayRead) errors += "Background read is not granted; open the app to sync new records"
                 if (mayRead) {
+                    val historyGranted = HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY in granted
+                    if (db.setting("historyGranted") != historyGranted.toString()) {
+                        // The readable window changed, so every type is read again; the record
+                        // index keeps already-sent records from being queued twice.
+                        db.forgetAllCursors()
+                        db.setSetting("historyGranted", historyGranted.toString())
+                    }
                     for (type in supportedTypes(client)) {
                         if (type.readPermission !in granted) {
                             db.forgetType(type.name)
@@ -108,7 +127,8 @@ internal object SyncEngine {
                         }
                         try {
                             phase = "Reading ${type.name}"
-                            syncType(client, db, type, historyDays(db)) {
+                            val window = HistoryWindow(historyDays(db), historyGranted)
+                            syncType(client, db, type, window) {
                                 if (db.queueTotals().batches >= QUEUE_HIGH_WATER && drain() !is DrainResult.Drained) {
                                     throw QueueBackedUp("Upload is failing; reading paused until the queue drains")
                                 }
@@ -174,7 +194,7 @@ internal object SyncEngine {
         client: HealthConnectClient,
         db: SyncDatabase,
         type: HealthRecordType,
-        historyDays: Int,
+        window: HistoryWindow,
         afterCommit: () -> Unit,
     ) {
         var cursor = db.cursor(type.name)
@@ -199,18 +219,18 @@ internal object SyncEngine {
             if (!page.hasMore) return
             cursor = page.nextChangesToken
         }
-        backfill(client, db, type, historyDays, afterCommit)
+        backfill(client, db, type, window, afterCommit)
     }
 
     /**
-     * Reads the history window newest first in 30-day slices, persisting progress after each
+     * Reads the history window newest first in 90-day slices, persisting progress after each
      * slice so a backfill interrupted by quota or process death resumes where it stopped.
      */
     private suspend fun backfill(
         client: HealthConnectClient,
         db: SyncDatabase,
         type: HealthRecordType,
-        historyDays: Int,
+        window: HistoryWindow,
         afterCommit: () -> Unit,
     ) {
         var state = db.backfill(type.name) ?: run {
@@ -218,7 +238,7 @@ internal object SyncEngine {
             Backfill(
                 token = client.getChangesToken(ChangesTokenRequest(recordTypes = setOf(type.recordClass))),
                 scan = now,
-                windowStart = now - TimeUnit.DAYS.toMillis(historyDays.toLong()),
+                windowStart = window.start(now),
                 nextEnd = now,
                 startedAt = now,
             ).also { db.saveBackfill(type.name, it) }
@@ -249,7 +269,9 @@ internal object SyncEngine {
             state = Backfill(state.token, state.scan, state.windowStart, sliceStart, state.startedAt)
             db.saveBackfill(type.name, state)
         }
-        val missing = db.missing(type.name, state.windowStart, state.startedAt, state.scan)
+        // A record outside what this scan could read must not be reported as deleted: the API
+        // never lets an older record undo a deletion.
+        val missing = db.missing(type.name, maxOf(state.windowStart, window.start(state.startedAt)), state.startedAt, state.scan)
         val now = Instant.now()
         db.commit(
             type.name,
