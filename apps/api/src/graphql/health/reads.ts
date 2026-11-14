@@ -31,6 +31,7 @@ import {
   syncBatches,
   type HealthMetric,
 } from "../../db/schema";
+import { isCumulative, originOut, seriesSamples, type SourceMode } from "../../health/sources";
 import { apiError } from "../errors";
 import { clampLimit, decodeCursor, toPage, type Cursor } from "../pagination";
 
@@ -101,7 +102,7 @@ const BUCKET_HOURS: Record<(typeof BUCKETS)[number], number> = {
 };
 const MAX_BUCKETS = 10_000;
 
-function isTimeZone(timeZone: string): boolean {
+export function isTimeZone(timeZone: string): boolean {
   try {
     new Intl.DateTimeFormat("en-US", { timeZone });
     return true;
@@ -110,9 +111,19 @@ function isTimeZone(timeZone: string): boolean {
   }
 }
 
+type SeriesBucketRow = {
+  bucket_start: Date | string;
+  value: number | string;
+  count: number;
+  origins: string[];
+};
+type SeriesSourceRow = { origin: string; days: number; samples: number };
+
 /**
  * Samples are bucketed by their start time; an interval that crosses a bucket boundary counts
- * entirely towards the bucket it starts in. Buckets without samples are omitted.
+ * entirely towards the bucket it starts in. Buckets without samples are omitted. A cumulative
+ * metric without `dataOrigin` defaults to PREFERRED: one origin per local day (see
+ * `seriesSamples`); every other series uses all samples that match.
  */
 export async function quantitySeries(
   db: Database,
@@ -124,6 +135,7 @@ export async function quantitySeries(
     bucket: (typeof BUCKETS)[number];
     aggregation: (typeof AGGREGATIONS)[number];
     dataOrigin?: string | null;
+    sourceMode?: SourceMode | null;
     timeZone: string;
   },
 ) {
@@ -134,35 +146,52 @@ export async function quantitySeries(
     throw apiError("BAD_USER_INPUT", `The range spans more than ${MAX_BUCKETS} buckets.`);
   }
 
-  const t = healthQuantitySamples;
+  const cumulative = isCumulative(args.metric);
+  const sourceMode: SourceMode =
+    cumulative && !args.dataOrigin ? (args.sourceMode ?? "PREFERRED") : "ALL";
+  const used = seriesSamples({
+    userId,
+    metric: args.metric,
+    from: args.from,
+    to: args.to,
+    dataOrigin: args.dataOrigin ?? null,
+    timeZone: args.timeZone,
+    mode: sourceMode,
+  });
   const value = {
-    SUM: sql<number>`sum(${t.value})`,
-    AVG: sql<number>`avg(${t.value})`,
-    MIN: sql<number>`min(${t.value})`,
-    MAX: sql<number>`max(${t.value})`,
-    COUNT: sql<number>`count(*)`,
+    SUM: sql`sum(value)`,
+    AVG: sql`avg(value)`,
+    MIN: sql`min(value)`,
+    MAX: sql`max(value)`,
+    COUNT: sql`count(*)`,
   }[args.aggregation];
   const unit = args.bucket.toLowerCase();
 
-  return db
-    .select({
-      bucketStart: sql<Date>`date_trunc(${unit}, ${t.startTime}, ${args.timeZone})`.mapWith(
-        t.startTime,
-      ),
-      value: value.mapWith(Number),
-      count: sql<number>`count(*)`.mapWith(Number),
-    })
-    .from(t)
-    .where(
-      and(
-        eq(t.userId, userId),
-        eq(t.metric, args.metric),
-        args.dataOrigin ? eq(t.dataOrigin, args.dataOrigin) : undefined,
-        ...within(t.startTime, args),
-      ),
-    )
-    .groupBy(sql`1`)
-    .orderBy(sql`1`);
+  const buckets = (await db.execute(sql`${used}
+    SELECT date_trunc(${unit}, start_time, ${args.timeZone}) AS bucket_start,
+      ${value}::float8 AS value, count(*)::int AS count,
+      array_agg(DISTINCT origin ORDER BY origin) AS origins
+    FROM used GROUP BY 1 ORDER BY 1`)) as unknown as SeriesBucketRow[];
+  const sources = (await db.execute(sql`${used}
+    SELECT origin, count(DISTINCT day)::int AS days, count(*)::int AS samples
+    FROM used GROUP BY 1 ORDER BY days DESC, samples DESC, origin`)) as unknown as SeriesSourceRow[];
+
+  return {
+    metric: args.metric,
+    cumulative,
+    sourceMode,
+    buckets: buckets.map((row) => ({
+      bucketStart: row.bucket_start instanceof Date ? row.bucket_start : new Date(row.bucket_start),
+      value: Number(row.value),
+      count: row.count,
+      dataOrigins: row.origins.map(originOut),
+    })),
+    sources: sources.map((row) => ({
+      dataOrigin: originOut(row.origin),
+      days: row.days,
+      samples: row.samples,
+    })),
+  };
 }
 
 export async function listSleepSessions(db: Database, userId: string, args: ListArgs) {

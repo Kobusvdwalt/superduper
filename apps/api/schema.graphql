@@ -106,6 +106,11 @@ type HealthMetricCoverage {
 
 """Writes in the health domain."""
 type HealthMutation {
+  """
+  Saves the data origin order of a cumulative metric, highest priority first. An empty list restores the default ranking. Requires a session.
+  """
+  setSourcePriority(dataOrigins: [String!]!, metric: HealthMetric!, timeZone: String = "UTC"): HealthSourcePriority!
+
   """Applies one batch of records and deletions. Clients only."""
   sync(input: HealthSyncInput!): HealthSyncResult!
 }
@@ -156,6 +161,9 @@ type HealthQuantityBucket {
 
   """Samples in the bucket."""
   count: Int!
+
+  """Origins whose samples are in the bucket; null for samples without one."""
+  dataOrigins: [String]!
   value: Float!
 }
 
@@ -183,7 +191,18 @@ type HealthQuantitySamplePage {
 
 type HealthQuantitySeries {
   buckets: [HealthQuantityBucket!]!
+
+  """Whether the metric's samples add up (steps, distance, energy, …)."""
+  cumulative: Boolean!
   metric: HealthMetric!
+
+  """
+  The mode applied: PREFERRED only for a cumulative metric without `dataOrigin`, ALL otherwise.
+  """
+  sourceMode: HealthSourceMode!
+
+  """The origins the buckets are built from, most days first."""
+  sources: [HealthSeriesSource!]!
 
   """Canonical unit of every value of this metric."""
   unit: String!
@@ -236,11 +255,18 @@ type HealthQuery {
   quantitySeries(
     aggregation: HealthAggregation!
     bucket: HealthBucket!
+
+    """Only samples written by this app; the source mode does not apply."""
     dataOrigin: String
     from: DateTime!
     metric: HealthMetric!
 
-    """IANA name, e.g. `Africa/Johannesburg`."""
+    """
+    For a cumulative metric without `dataOrigin`; defaults to PREFERRED. Ignored otherwise.
+    """
+    sourceMode: HealthSourceMode
+
+    """IANA name, e.g. `Africa/Johannesburg`. Also defines the local day."""
     timeZone: String = "UTC"
     to: DateTime!
   ): HealthQuantitySeries!
@@ -285,6 +311,14 @@ type HealthQuery {
     """Exclusive start time."""
     to: DateTime
   ): HealthSleepSessionPage!
+
+  """The data origin order PREFERRED series of this metric use, and why."""
+  sourcePriority(
+    metric: HealthMetric!
+
+    """Defines the local days counted for the default ranking."""
+    timeZone: String = "UTC"
+  ): HealthSourcePriority!
 
   """Applied batches, newest first."""
   syncBatches(after: String, clientId: UUID, limit: Int): HealthSyncBatchPage!
@@ -414,6 +448,15 @@ enum HealthRouteStatus {
   NO_DATA
 }
 
+"""One data origin that contributed to a series."""
+type HealthSeriesSource {
+  dataOrigin: String
+
+  """Local days it contributed to."""
+  days: Int!
+  samples: Int!
+}
+
 type HealthSleepSession {
   dataOrigin: String
   endTime: DateTime!
@@ -449,6 +492,48 @@ type HealthSleepStageInterval {
   endTime: DateTime!
   stage: HealthSleepStage!
   startTime: DateTime!
+}
+
+enum HealthSourceMode {
+  """Every sample; overlapping origins of a cumulative metric add up."""
+  ALL
+
+  """
+  Per local day, only the highest-priority data origin with samples that day (see `HealthQuery.sourcePriority`). Intervals that overlap within a day are not split between origins.
+  """
+  PREFERRED
+}
+
+"""
+The order in effect for PREFERRED series: the saved order first, then by default the origin with most local days covered, then most samples, then name.
+"""
+type HealthSourcePriority {
+  cumulative: Boolean!
+  metric: HealthMetric!
+
+  """Every origin with samples of the metric, in effective priority order."""
+  origins: [HealthSourceRank!]!
+
+  """The user's saved order, highest first; empty when none is saved."""
+  savedOrder: [String!]!
+}
+
+type HealthSourceRank {
+  dataOrigin: String
+
+  """Local days with samples, over all time."""
+  days: Int!
+  firstTime: DateTime!
+  lastTime: DateTime!
+
+  """1 is the highest priority."""
+  rank: Int!
+  samples: Int!
+
+  """
+  True when the rank comes from the saved order, false when from the default.
+  """
+  saved: Boolean!
 }
 
 type HealthSyncBatch {

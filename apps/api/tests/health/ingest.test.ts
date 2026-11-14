@@ -319,7 +319,7 @@ describe("health.sync", () => {
       await sync(app, token, batch([after]));
 
       const row = await raw(id);
-      expect(row?.payload.exerciseRouteResult.type).toBe("Data");
+      expect(row?.payload).toMatchObject({ exerciseRouteResult: { type: "Data" } });
       expect((await versions(id)).map((v) => v.applied)).toEqual([true, true]);
       const [workout] = await app.db
         .select()
