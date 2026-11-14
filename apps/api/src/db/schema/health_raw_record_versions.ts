@@ -20,9 +20,8 @@ export const healthRawRecordVersions = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    clientId: uuid("client_id")
-      .notNull()
-      .references(() => clients.id, { onDelete: "cascade" }),
+    /** The client this version was received from; null once that client is deleted. */
+    clientId: uuid("client_id").references(() => clients.id, { onDelete: "set null" }),
     origin: healthOrigin("origin").notNull(),
     recordType: text("record_type").notNull(),
     sourceRecordId: text("source_record_id").notNull(),
@@ -49,7 +48,7 @@ export const healthRawRecordVersions = pgTable(
   },
   (table) => [
     unique("health_raw_record_versions_content_key").on(
-      table.clientId,
+      table.userId,
       table.origin,
       table.recordType,
       table.sourceRecordId,

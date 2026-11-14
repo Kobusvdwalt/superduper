@@ -277,6 +277,11 @@ const RawRecordVersionType = builder
       modifiedAt: t.expose("modifiedAt", { type: "DateTime", nullable: true }),
       deletedAt: t.expose("deletedAt", { type: "DateTime", nullable: true }),
       receivedAt: t.expose("receivedAt", { type: "DateTime" }),
+      clientId: t.expose("clientId", {
+        type: "UUID",
+        nullable: true,
+        description: "The client this version was first received from; null once deleted.",
+      }),
       schemaVersion: t.exposeInt("schemaVersion"),
       syncBatchId: t.expose("syncBatchId", { type: "UUID" }),
       payload: t.expose("payload", { type: "JSON", nullable: true }),
@@ -289,7 +294,12 @@ export const RawRecordType = builder
     description: "A record exactly as the client pushed it; the source of every typed table.",
     fields: (t) => ({
       id: t.expose("id", { type: "UUID" }),
-      clientId: t.expose("clientId", { type: "UUID" }),
+      clientId: t.expose("clientId", {
+        type: "UUID",
+        nullable: true,
+        description:
+          "The client the current state was last received from; null once that client is deleted. A record is identified per user, so every client of the user updates the same record.",
+      }),
       origin: t.expose("origin", { type: HealthOriginEnum }),
       recordType: t.exposeString("recordType"),
       sourceRecordId: t.exposeString("sourceRecordId"),
@@ -362,7 +372,11 @@ const SyncBatchType = builder
     fields: (t) => ({
       id: t.expose("id", { type: "UUID" }),
       batchId: t.expose("batchId", { type: "UUID", description: "The client's idempotency key." }),
-      clientId: t.expose("clientId", { type: "UUID" }),
+      clientId: t.expose("clientId", {
+        type: "UUID",
+        nullable: true,
+        description: "Null once the client is deleted.",
+      }),
       schemaVersion: t.exposeInt("schemaVersion"),
       recordCount: t.exposeInt("recordCount"),
       deletionCount: t.exposeInt("deletionCount"),

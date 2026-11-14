@@ -288,7 +288,7 @@ export async function getRawRecord(db: Database, userId: string, id: string) {
   return row ?? null;
 }
 
-/** Every version received for the record's source identity, oldest first. */
+/** Every version received for the record's source identity from any client, oldest first. */
 export function listRawRecordVersions(db: Database, record: typeof healthRawRecords.$inferSelect) {
   const t = healthRawRecordVersions;
   return db
@@ -297,7 +297,6 @@ export function listRawRecordVersions(db: Database, record: typeof healthRawReco
     .where(
       and(
         eq(t.userId, record.userId),
-        eq(t.clientId, record.clientId),
         eq(t.origin, record.origin),
         eq(t.recordType, record.recordType),
         eq(t.sourceRecordId, record.sourceRecordId),
@@ -398,13 +397,13 @@ export async function clientSyncs(db: Database, userId: string) {
     .where(
       inArray(
         clients.id,
-        stats.map((row) => row.clientId),
+        stats.flatMap((row) => (row.clientId ? [row.clientId] : [])),
       ),
     );
   const byId = new Map(owners.map((client) => [client.id, client]));
 
   return stats.flatMap((row) => {
-    const client = byId.get(row.clientId);
+    const client = row.clientId ? byId.get(row.clientId) : undefined;
     return client && row.lastSyncedAt
       ? [{ client, lastSyncedAt: row.lastSyncedAt, batches: row.batches }]
       : [];

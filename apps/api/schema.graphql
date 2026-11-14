@@ -310,7 +310,10 @@ type HealthQuery {
 A record exactly as the client pushed it; the source of every typed table.
 """
 type HealthRawRecord {
-  clientId: UUID!
+  """
+  The client the current state was last received from; null once that client is deleted. A record is identified per user, so every client of the user updates the same record.
+  """
+  clientId: UUID
   dataOrigin: String
   deletedAt: DateTime
   endTime: DateTime
@@ -346,6 +349,9 @@ type HealthRawRecordPage {
 type HealthRawRecordVersion {
   """Whether this version became the current state when it arrived."""
   applied: Boolean!
+
+  """The client this version was first received from; null once deleted."""
+  clientId: UUID
   deletedAt: DateTime
   id: UUID!
   modifiedAt: DateTime
@@ -448,7 +454,9 @@ type HealthSleepStageInterval {
 type HealthSyncBatch {
   """The client's idempotency key."""
   batchId: UUID!
-  clientId: UUID!
+
+  """Null once the client is deleted."""
+  clientId: UUID
   deletionCount: Int!
   id: UUID!
   receivedAt: DateTime!
