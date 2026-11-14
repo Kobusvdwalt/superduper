@@ -12,8 +12,8 @@ patterns). This file lists where Super Duper deliberately differs.
 
 Bun workspaces, one lockfile.
 
-| Path        | Package           | What                                                    |
-| ----------- | ----------------- | ------------------------------------------------------- |
+| Path        | Package           | What                                                     |
+| ----------- | ----------------- | -------------------------------------------------------- |
 | `apps/api`  | `@superduper/api` | Elysia + GraphQL Yoga + Pothos, Better Auth, Drizzle     |
 | `apps/web`  | `@superduper/web` | Vite + React, TanStack Router/Query, GraphQL codegen     |
 | `apps/app`  | `@superduper/app` | Tauri 2 shell (desktop + Android) and its native plugins |

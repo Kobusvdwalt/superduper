@@ -1,0 +1,37 @@
+{
+  "name": "@superduper/api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "bun run typecheck && bun run lint && bun run format:check && bun run deadcode && bun run schema:check && bun run db:check && bun run test",
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "test": "bun test tests",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint --deny-warnings",
+    "format": "oxfmt -c ../../.oxfmtrc.json .",
+    "format:check": "oxfmt -c ../../.oxfmtrc.json --check .",
+    "deadcode": "knip --directory ../.. --workspace apps/api",
+    "schema": "bun run scripts/print-schema.ts",
+    "schema:check": "bun run scripts/print-schema.ts --check",
+    "db:generate": "bunx --bun drizzle-kit generate",
+    "db:check": "bun run scripts/check-migrations.ts",
+    "health:reproject": "bun run scripts/health-reproject.ts",
+    "dev:seed": "bun --env-file=../../default.env --env-file=../../.env run scripts/dev-seed.ts"
+  },
+  "dependencies": {
+    "@pothos/core": "4.13.1",
+    "better-auth": "1.6.23",
+    "drizzle-orm": "1.0.0-rc.4-de6c356",
+    "elysia": "1.4.29",
+    "graphql": "16.14.2",
+    "graphql-scalars": "1.25.0",
+    "graphql-yoga": "5.21.2",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.4",
+    "@electric-sql/pglite-socket": "0.2.7",
+    "drizzle-kit": "1.0.0-rc.4-ca0f029"
+  }
+}

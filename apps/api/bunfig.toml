@@ -1,0 +1,4 @@
+[test]
+# The one PGlite instance is shared by every test file, so stopping it belongs to the run;
+# only hooks registered by a preload script have that scope.
+preload = ["./tests/_hooks/preload.ts"]

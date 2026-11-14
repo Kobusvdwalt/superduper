@@ -1,0 +1,107 @@
+{
+  "origin": "HEALTH_CONNECT",
+  "recordType": "PlannedExerciseSessionRecord",
+  "sourceRecordId": "00000000-0000-4000-8000-000000000028",
+  "dataOrigin": "com.example.fitness",
+  "startTime": "2026-11-11T05:30:00Z",
+  "endTime": "2026-11-11T06:15:00Z",
+  "startZoneOffsetSeconds": 7200,
+  "endZoneOffsetSeconds": 7200,
+  "modifiedAt": "2026-11-10T09:00:00Z",
+  "payload": {
+    "startTime": "2026-11-11T05:30:00Z",
+    "startZoneOffsetSeconds": 7200,
+    "endTime": "2026-11-11T06:15:00Z",
+    "endZoneOffsetSeconds": 7200,
+    "exerciseType": 56,
+    "exerciseTypeName": "RUNNING",
+    "hasExplicitTime": true,
+    "completedExerciseSessionId": null,
+    "blocks": [
+      {
+        "repetitions": 1,
+        "description": "Warm-up",
+        "steps": [
+          {
+            "exerciseType": 64,
+            "exerciseTypeName": "WALKING",
+            "exercisePhase": 1,
+            "exercisePhaseName": "WARMUP",
+            "completionGoal": {
+              "type": "DurationGoal",
+              "durationMillis": 600000
+            },
+            "performanceTargets": [
+              {
+                "type": "HeartRateTarget",
+                "minHeartRate": 90.0,
+                "maxHeartRate": 120.0
+              }
+            ],
+            "description": "Brisk walk"
+          }
+        ]
+      },
+      {
+        "repetitions": 4,
+        "description": "Intervals",
+        "steps": [
+          {
+            "exerciseType": 46,
+            "exerciseTypeName": "RUNNING",
+            "exercisePhase": 3,
+            "exercisePhaseName": "ACTIVE",
+            "completionGoal": {
+              "type": "DistanceGoal",
+              "distance": {
+                "value": 800.0,
+                "unit": "meters"
+              }
+            },
+            "performanceTargets": [
+              {
+                "type": "SpeedTarget",
+                "minSpeed": {
+                  "value": 3.8,
+                  "unit": "metersPerSecond"
+                },
+                "maxSpeed": {
+                  "value": 4.2,
+                  "unit": "metersPerSecond"
+                }
+              },
+              {
+                "type": "RateOfPerceivedExertionTarget",
+                "rpe": 7
+              }
+            ],
+            "description": "Fast 800 m"
+          },
+          {
+            "exerciseType": 44,
+            "exerciseTypeName": "REST",
+            "exercisePhase": 2,
+            "exercisePhaseName": "REST",
+            "completionGoal": {
+              "type": "ManualCompletion"
+            },
+            "performanceTargets": [],
+            "description": null
+          }
+        ]
+      }
+    ],
+    "title": "Interval session",
+    "notes": null,
+    "metadata": {
+      "id": "00000000-0000-4000-8000-000000000028",
+      "dataOrigin": "com.example.fitness",
+      "lastModifiedTime": "2026-11-10T09:00:00Z",
+      "clientRecordId": null,
+      "clientRecordVersion": 0,
+      "recordingMethod": 3,
+      "recordingMethodName": "MANUAL_ENTRY",
+      "device": null
+    }
+  }
+}

@@ -1,8 +1,24 @@
 {
   "name": "superduper",
   "private": true,
-  "workspaces": ["apps/*"],
+  "type": "module",
+  "packageManager": "bun@1.4.4",
+  "workspaces": [
+    "apps/*"
+  ],
   "scripts": {
-    "check": "bun run --filter '*' check"
+    "check": "bun run check:root && bun run --filter '@superduper/*' check",
+    "check:root": "bun run format:check",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "dev:seed": "bun run --filter @superduper/api dev:seed"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.2",
+    "knip": "6.38.0",
+    "oxfmt": "0.70.0",
+    "oxlint": "1.85.0",
+    "oxlint-tsgolint": "7.0.2002",
+    "typescript": "7.0.2"
   }
 }

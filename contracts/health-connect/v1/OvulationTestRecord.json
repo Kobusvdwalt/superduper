@@ -1,0 +1,27 @@
+{
+  "origin": "HEALTH_CONNECT",
+  "recordType": "OvulationTestRecord",
+  "sourceRecordId": "00000000-0000-4000-8000-000000000026",
+  "dataOrigin": "com.example.cycle",
+  "startTime": "2026-11-10T08:00:00Z",
+  "endTime": null,
+  "startZoneOffsetSeconds": 7200,
+  "endZoneOffsetSeconds": null,
+  "modifiedAt": "2026-11-10T09:00:00Z",
+  "payload": {
+    "time": "2026-11-10T08:00:00Z",
+    "zoneOffsetSeconds": 7200,
+    "result": 3,
+    "resultName": "NEGATIVE",
+    "metadata": {
+      "id": "00000000-0000-4000-8000-000000000026",
+      "dataOrigin": "com.example.cycle",
+      "lastModifiedTime": "2026-11-10T09:00:00Z",
+      "clientRecordId": null,
+      "clientRecordVersion": 0,
+      "recordingMethod": 3,
+      "recordingMethodName": "MANUAL_ENTRY",
+      "device": null
+    }
+  }
+}

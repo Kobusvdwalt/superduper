@@ -1,0 +1,34 @@
+{
+  "origin": "HEALTH_CONNECT",
+  "recordType": "BodyFatRecord",
+  "sourceRecordId": "00000000-0000-4000-8000-000000000006",
+  "dataOrigin": "com.example.scale",
+  "startTime": "2026-11-10T06:45:00Z",
+  "endTime": null,
+  "startZoneOffsetSeconds": 7200,
+  "endZoneOffsetSeconds": null,
+  "modifiedAt": "2026-11-10T09:00:00Z",
+  "payload": {
+    "time": "2026-11-10T06:45:00Z",
+    "zoneOffsetSeconds": 7200,
+    "percentage": {
+      "value": 18.3,
+      "unit": "percent"
+    },
+    "metadata": {
+      "id": "00000000-0000-4000-8000-000000000006",
+      "dataOrigin": "com.example.scale",
+      "lastModifiedTime": "2026-11-10T09:00:00Z",
+      "clientRecordId": null,
+      "clientRecordVersion": 0,
+      "recordingMethod": 2,
+      "recordingMethodName": "AUTOMATICALLY_RECORDED",
+      "device": {
+        "manufacturer": "Example",
+        "model": "Scale 1",
+        "type": 3,
+        "typeName": "SCALE"
+      }
+    }
+  }
+}
