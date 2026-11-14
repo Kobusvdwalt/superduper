@@ -3,13 +3,16 @@ import { beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { and, asc, count, eq } from "drizzle-orm";
 
 import {
+  clients,
   healthQuantitySamples,
   healthRawRecords,
   healthRawRecordVersions,
+  healthWorkoutRoutePoints,
+  healthWorkouts,
   syncBatches,
 } from "../../src/db/schema";
 import { useTestApp } from "../_hooks/app";
-import { batch, deletion, steps, sync } from "./helpers";
+import { batch, deletion, loadFixtures, steps, sync } from "./helpers";
 
 const app = useTestApp();
 
@@ -149,15 +152,66 @@ describe("health.sync", () => {
       expect((await raw(id))?.projectionError).toContain("distance.unit");
     });
 
-    test("source ids are unique per client, not globally", async () => {
-      const other = await app.createClient(cookie, "Tablet");
-      await sync(app, token, batch([steps(id, 1, "2026-11-10T08:00:00Z")]));
-      await sync(app, other.token, batch([steps(id, 2, "2026-11-10T08:00:00Z")]));
+    test("a second client pushing the same source record updates the same record", async () => {
+      const first = await app.db.select().from(clients).where(eq(clients.name, "Test phone"));
+      const repaired = await app.createClient(cookie, "Same phone, paired again");
+      await sync(app, token, batch([steps(id, 100, "2026-11-10T08:00:00Z")]));
+      await sync(app, repaired.token, batch([steps(id, 100, "2026-11-10T08:00:00Z")]));
+
       const rows = await app.db
         .select()
         .from(healthRawRecords)
         .where(eq(healthRawRecords.sourceRecordId, id));
-      expect(rows).toHaveLength(2);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.clientId).toBe(first[0]!.id);
+      expect(await versions(id)).toHaveLength(1);
+      expect(await stepValues(id)).toEqual([100]);
+
+      await sync(app, repaired.token, batch([steps(id, 120, "2026-11-10T09:00:00Z")]));
+      expect((await raw(id))?.clientId).toBe(repaired.id);
+      expect((await versions(id)).map((v) => v.clientId)).toEqual([first[0]!.id, repaired.id]);
+      expect(await stepValues(id)).toEqual([120]);
+    });
+
+    test("two clients pushing the same new record at once store it once", async () => {
+      const other = await app.createClient(cookie, "Racing tablet");
+      const results = await Promise.all([
+        sync(app, token, batch([steps(id, 5, "2026-11-10T08:00:00Z")])),
+        sync(app, other.token, batch([steps(id, 5, "2026-11-10T08:00:00Z")])),
+      ]);
+      expect(results.map((result) => result.errors)).toEqual([[], []]);
+      expect(await versions(id)).toHaveLength(1);
+      expect(await stepValues(id)).toEqual([5]);
+    });
+
+    test("a deletion from another client of the user applies", async () => {
+      const other = await app.createClient(cookie, "Other phone");
+      await sync(app, token, batch([steps(id, 100, "2026-11-10T08:00:00Z")]));
+      await sync(app, other.token, batch([], [deletion(id, "2026-11-10T10:00:00Z")]));
+      expect((await raw(id))?.deletedAt).toEqual(new Date("2026-11-10T10:00:00Z"));
+      expect(await stepValues(id)).toEqual([]);
+    });
+
+    test("revoking or deleting a client keeps its health data", async () => {
+      const old = await app.createClient(cookie, "Lost phone");
+      await sync(app, old.token, batch([steps(id, 100, "2026-11-10T08:00:00Z")]));
+      await app.execute(`mutation($id: UUID!) { identity { revokeClient(id: $id) { id } } }`, {
+        cookie,
+        variables: { id: old.id },
+      });
+      expect((await raw(id))?.clientId).toBe(old.id);
+
+      await app.db.delete(clients).where(eq(clients.id, old.id));
+      const row = await raw(id);
+      expect(row).toMatchObject({ clientId: null, deletedAt: null });
+      expect(row?.payload.count).toBe(100);
+      expect(await versions(id)).toMatchObject([{ clientId: null }]);
+      expect(await stepValues(id)).toEqual([100]);
+      const [kept] = await app.db
+        .select({ n: count() })
+        .from(syncBatches)
+        .where(eq(syncBatches.id, row!.syncBatchId));
+      expect(kept?.n).toBe(1);
     });
   });
 
@@ -204,12 +258,24 @@ describe("health.sync", () => {
       expect((await raw(id))?.payload.count).toBe(100);
     });
 
-    test("a batchId is scoped to its client", async () => {
+    test("a batchId is scoped to its client: another client's is neither a replay nor a CONFLICT", async () => {
       const other = await app.createClient(cookie, "Watch");
       const input = batch([steps(id, 100, "2026-11-10T08:00:00Z")]);
       await sync(app, token, input);
-      const result = await sync(app, other.token, { ...input, records: [] });
-      expect(result.data.health.sync.replayed).toBe(false);
+
+      const same = await sync(app, other.token, input);
+      expect(same.errors).toEqual([]);
+      expect(same.data.health.sync.replayed).toBe(false);
+      expect(await versions(id)).toHaveLength(1);
+
+      const different = await sync(app, other.token, {
+        ...batch([steps(id, 200, "2026-11-10T09:00:00Z")]),
+        batchId: crypto.randomUUID(),
+      });
+      expect(different.errors).toEqual([]);
+      const reused = await sync(app, token, { ...input, records: [] });
+      expect(reused.code).toBe("CONFLICT");
+      expect((await raw(id))?.payload.count).toBe(200);
     });
 
     test("a rejected batch stores nothing, so its batchId stays usable", async () => {
@@ -233,17 +299,49 @@ describe("health.sync", () => {
       expect((await versions(id)).map((v) => v.applied)).toEqual([true, true]);
     });
 
-    test("an older or equally old record does not replace it but joins the history", async () => {
+    test("an older record does not replace it but joins the history", async () => {
       await sync(app, token, batch([steps(id, 250, "2026-11-10T09:00:00Z")]));
       await sync(app, token, batch([steps(id, 100, "2026-11-10T08:00:00Z")]));
-      await sync(app, token, batch([steps(id, 300, "2026-11-10T09:00:00Z")]));
       expect((await raw(id))?.payload.count).toBe(250);
       expect(await stepValues(id)).toEqual([250]);
       const history = await versions(id);
       expect(history.map((v) => [v.payload?.count, v.applied])).toEqual([
         [250, true],
         [100, false],
-        [300, false],
+      ]);
+    });
+
+    test("an equally old record with different content replaces it and its projection", async () => {
+      const after = { ...(await loadFixtures()).get("ExerciseSessionRecord")!, sourceRecordId: id };
+      const before = structuredClone(after);
+      before.payload.exerciseRouteResult = { type: "ConsentRequired" };
+      await sync(app, token, batch([before]));
+      await sync(app, token, batch([after]));
+
+      const row = await raw(id);
+      expect(row?.payload).toMatchObject({ exerciseRouteResult: { type: "Data" } });
+      expect((await versions(id)).map((v) => v.applied)).toEqual([true, true]);
+      const [workout] = await app.db
+        .select()
+        .from(healthWorkouts)
+        .where(eq(healthWorkouts.rawRecordId, row!.id));
+      expect(workout?.routeStatus).toBe("DATA");
+      const route = await app.db
+        .select()
+        .from(healthWorkoutRoutePoints)
+        .where(eq(healthWorkoutRoutePoints.workoutId, workout!.id));
+      expect(route.length).toBeGreaterThan(0);
+    });
+
+    test("an equally old record whose content was received before does not win back", async () => {
+      await sync(app, token, batch([steps(id, 100, "2026-11-10T09:00:00Z")]));
+      await sync(app, token, batch([steps(id, 300, "2026-11-10T09:00:00Z")]));
+      await sync(app, token, batch([steps(id, 100, "2026-11-10T09:00:00Z")]));
+      expect((await raw(id))?.payload.count).toBe(300);
+      expect(await stepValues(id)).toEqual([300]);
+      expect((await versions(id)).map((v) => [v.payload?.count, v.applied])).toEqual([
+        [100, true],
+        [300, true],
       ]);
     });
 

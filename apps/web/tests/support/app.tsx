@@ -35,6 +35,10 @@ export function renderApp(
     if (url.endsWith("/api/auth/get-session")) {
       return Promise.resolve(Response.json(signedIn ? SESSION : null));
     }
+    if (url.endsWith("/api/auth/sign-in/email") || url.endsWith("/api/auth/sign-up/email")) {
+      signedIn = true;
+      return Promise.resolve(Response.json(SESSION));
+    }
     return Promise.resolve(Response.json({}, { status: 404 }));
   }) as unknown as typeof fetch;
 

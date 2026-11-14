@@ -16,40 +16,68 @@ import { validateSyncInput } from "./validate";
 type Batch = { id: string; userId: string; clientId: string; schemaVersion: number; at: Date };
 type SourceKey = Pick<HealthRecordInput, "origin" | "recordType" | "sourceRecordId">;
 
-function keyWhere(clientId: string, key: SourceKey) {
+function keyWhere(userId: string, key: SourceKey) {
   return and(
-    eq(healthRawRecords.clientId, clientId),
+    eq(healthRawRecords.userId, userId),
     eq(healthRawRecords.origin, key.origin),
     eq(healthRawRecords.recordType, key.recordType),
     eq(healthRawRecords.sourceRecordId, key.sourceRecordId),
   );
 }
 
-async function lockedCurrent(tx: Transaction, clientId: string, key: SourceKey) {
+async function lockedCurrent(tx: Transaction, userId: string, key: SourceKey) {
   const [row] = await tx
     .select()
     .from(healthRawRecords)
-    .where(keyWhere(clientId, key))
+    .where(keyWhere(userId, key))
     .for("update")
     .limit(1);
   return row ?? null;
 }
 
 /** The latest deletion received for a source record, including one that arrived first. */
-async function latestDeletion(tx: Transaction, clientId: string, key: SourceKey) {
+function versionKeyWhere(userId: string, key: SourceKey) {
+  return and(
+    eq(healthRawRecordVersions.userId, userId),
+    eq(healthRawRecordVersions.origin, key.origin),
+    eq(healthRawRecordVersions.recordType, key.recordType),
+    eq(healthRawRecordVersions.sourceRecordId, key.sourceRecordId),
+  );
+}
+
+async function latestDeletion(tx: Transaction, userId: string, key: SourceKey) {
   const [row] = await tx
     .select({ deletedAt: max(healthRawRecordVersions.deletedAt) })
     .from(healthRawRecordVersions)
-    .where(
-      and(
-        eq(healthRawRecordVersions.clientId, clientId),
-        eq(healthRawRecordVersions.origin, key.origin),
-        eq(healthRawRecordVersions.recordType, key.recordType),
-        eq(healthRawRecordVersions.sourceRecordId, key.sourceRecordId),
-        eq(healthRawRecordVersions.operation, "DELETE"),
-      ),
-    );
+    .where(and(versionKeyWhere(userId, key), eq(healthRawRecordVersions.operation, "DELETE")));
   return row?.deletedAt ?? null;
+}
+
+async function seenBefore(tx: Transaction, userId: string, key: SourceKey, hash: string) {
+  const [row] = await tx
+    .select({ id: healthRawRecordVersions.id })
+    .from(healthRawRecordVersions)
+    .where(and(versionKeyWhere(userId, key), eq(healthRawRecordVersions.contentHash, hash)))
+    .limit(1);
+  return row !== undefined;
+}
+
+/**
+ * A newer `modifiedAt` replaces; an equal one replaces when the content is new for this record,
+ * because Health Connect can return richer content (an exercise route once access is granted)
+ * without changing the modified time. Content received before never wins back on a tie.
+ */
+async function replaces(
+  tx: Transaction,
+  userId: string,
+  record: HealthRecordInput,
+  current: typeof healthRawRecords.$inferSelect,
+  hash: string,
+) {
+  if (record.modifiedAt > current.modifiedAt) return true;
+  if (record.modifiedAt.getTime() !== current.modifiedAt.getTime()) return false;
+  if (hash === current.contentHash) return false;
+  return !(await seenBefore(tx, userId, record, hash));
 }
 
 function stillDeleted(deletedAt: Date | null, modifiedAt: Date): Date | null {
@@ -67,11 +95,11 @@ async function upsertRecord(tx: Transaction, batch: Batch, record: HealthRecordI
     modifiedAt: record.modifiedAt,
     schemaVersion: batch.schemaVersion,
   };
-  const current = await lockedCurrent(tx, batch.clientId, record);
+  const current = await lockedCurrent(tx, batch.userId, record);
 
   let stored: typeof healthRawRecords.$inferSelect | null = null;
   if (!current) {
-    const tombstone = await latestDeletion(tx, batch.clientId, record);
+    const tombstone = await latestDeletion(tx, batch.userId, record);
     [stored = null] = await tx
       .insert(healthRawRecords)
       .values({
@@ -88,10 +116,11 @@ async function upsertRecord(tx: Transaction, batch: Batch, record: HealthRecordI
         syncBatchId: batch.id,
       })
       .returning();
-  } else if (record.modifiedAt > current.modifiedAt) {
+  } else if (await replaces(tx, batch.userId, record, current, hash)) {
     [stored = null] = await tx
       .update(healthRawRecords)
       .set({
+        clientId: batch.clientId,
         ...envelope,
         payload: record.payload,
         contentHash: hash,
@@ -126,7 +155,7 @@ async function upsertRecord(tx: Transaction, batch: Batch, record: HealthRecordI
 }
 
 async function applyDeletion(tx: Transaction, batch: Batch, deletion: HealthRecordDeletionInput) {
-  const current = await lockedCurrent(tx, batch.clientId, deletion);
+  const current = await lockedCurrent(tx, batch.userId, deletion);
 
   let applied = false;
   if (
@@ -136,7 +165,12 @@ async function applyDeletion(tx: Transaction, batch: Batch, deletion: HealthReco
   ) {
     const [stored] = await tx
       .update(healthRawRecords)
-      .set({ deletedAt: deletion.deletedAt, receivedAt: batch.at, syncBatchId: batch.id })
+      .set({
+        clientId: batch.clientId,
+        deletedAt: deletion.deletedAt,
+        receivedAt: batch.at,
+        syncBatchId: batch.id,
+      })
       .where(eq(healthRawRecords.id, current.id))
       .returning();
     if (stored) await reprojectRecord(tx, stored);
@@ -164,8 +198,10 @@ async function applyDeletion(tx: Transaction, batch: Batch, deletion: HealthReco
 }
 
 /**
- * Applies one batch atomically; see docs/health-sync-contract.md for the guarantees. Batches of
- * one client are serialised by a transaction-scoped advisory lock.
+ * Applies one batch atomically; see docs/health-sync-contract.md for the guarantees. Record
+ * identity is per user, so batches of all of a user's clients are serialised by one
+ * transaction-scoped advisory lock: two clients pushing the same new record would otherwise race
+ * on its insert. The batchId stays scoped to the client that sent it.
  */
 export async function ingestHealthBatch(
   db: Database,
@@ -180,7 +216,9 @@ export async function ingestHealthBatch(
   });
 
   return db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${client.id}, 0))`);
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${`health-sync:${client.userId}`}, 0))`,
+    );
 
     const [existing] = await tx
       .select()

@@ -9,7 +9,8 @@ export const healthOrigin = pgEnum("health_origin", ["HEALTH_CONNECT"]);
 
 /**
  * The current version of every pushed health record, stored losslessly. The typed `health_*`
- * tables are a projection of this one.
+ * tables are a projection of this one. A record's identity is per user, not per client: the same
+ * source record pushed by a second client (a re-paired phone) is the same row.
  */
 export const healthRawRecords = pgTable(
   "health_raw_records",
@@ -18,9 +19,8 @@ export const healthRawRecords = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    clientId: uuid("client_id")
-      .notNull()
-      .references(() => clients.id, { onDelete: "cascade" }),
+    /** The client this version of the record was last received from; null once it is deleted. */
+    clientId: uuid("client_id").references(() => clients.id, { onDelete: "set null" }),
     origin: healthOrigin("origin").notNull(),
     recordType: text("record_type").notNull(),
     sourceRecordId: text("source_record_id").notNull(),
@@ -44,7 +44,7 @@ export const healthRawRecords = pgTable(
   },
   (table) => [
     unique("health_raw_records_source_key").on(
-      table.clientId,
+      table.userId,
       table.origin,
       table.recordType,
       table.sourceRecordId,

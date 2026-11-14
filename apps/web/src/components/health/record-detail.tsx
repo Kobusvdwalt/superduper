@@ -43,7 +43,7 @@ export function RecordDetail({ record }: { record: RawRecord }) {
             ["Received", formatDateTime(record.receivedAt)],
             ["Deleted", record.deletedAt ? formatDateTime(record.deletedAt) : "—"],
             ["Schema version", String(record.schemaVersion)],
-            ["Client", record.clientId],
+            ["Last received from client", record.clientId ?? "deleted client"],
           ]}
         />
       </Section>
@@ -64,6 +64,7 @@ export function RecordDetail({ record }: { record: RawRecord }) {
                 </Badge>
                 <span className="text-muted-foreground">
                   received {formatDateTime(version.receivedAt)}
+                  {` from client ${version.clientId ?? "(deleted)"}`}
                   {version.modifiedAt ? ` · modified ${formatDateTime(version.modifiedAt)}` : ""}
                   {version.deletedAt ? ` · deleted ${formatDateTime(version.deletedAt)}` : ""}
                 </span>

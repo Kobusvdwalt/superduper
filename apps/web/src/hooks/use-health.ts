@@ -3,9 +3,10 @@ import type {
   HealthAggregation,
   HealthBucket,
   HealthMetric,
+  HealthSourceMode,
   RawRecordsQueryVariables,
 } from "@/gql/graphql";
-import { useGqlPages, useGqlQuery } from "@/lib/graphql-hooks";
+import { useGqlMutation, useGqlPages, useGqlQuery } from "@/lib/graphql-hooks";
 
 const Coverage = graphql(`
   query Coverage {
@@ -42,6 +43,7 @@ const QuantitySeries = graphql(`
     $bucket: HealthBucket!
     $aggregation: HealthAggregation!
     $dataOrigin: String
+    $sourceMode: HealthSourceMode
     $timeZone: String!
   ) {
     health {
@@ -52,14 +54,23 @@ const QuantitySeries = graphql(`
         bucket: $bucket
         aggregation: $aggregation
         dataOrigin: $dataOrigin
+        sourceMode: $sourceMode
         timeZone: $timeZone
       ) {
         metric
         unit
+        cumulative
+        sourceMode
         buckets {
           bucketStart
           value
           count
+          dataOrigins
+        }
+        sources {
+          dataOrigin
+          days
+          samples
         }
       }
     }
@@ -73,6 +84,7 @@ export type SeriesInput = {
   bucket: HealthBucket;
   aggregation: HealthAggregation;
   dataOrigin: string | null;
+  sourceMode: HealthSourceMode | null;
   timeZone: string;
 };
 
@@ -193,6 +205,7 @@ const RawRecord = graphql(`
           modifiedAt
           deletedAt
           receivedAt
+          clientId
           schemaVersion
           syncBatchId
           payload
@@ -324,4 +337,40 @@ const Workout = graphql(`
 
 export function useWorkout(id: string) {
   return useGqlQuery(Workout, { variables: { id } });
+}
+
+const SourcePriority = graphql(`
+  query SourcePriority($metric: HealthMetric!, $timeZone: String!) {
+    health {
+      sourcePriority(metric: $metric, timeZone: $timeZone) {
+        metric
+        savedOrder
+        origins {
+          dataOrigin
+          rank
+          saved
+          days
+          samples
+        }
+      }
+    }
+  }
+`);
+
+export function useSourcePriority(variables: { metric: HealthMetric; timeZone: string }) {
+  return useGqlQuery(SourcePriority, { variables });
+}
+
+const SetSourcePriority = graphql(`
+  mutation SetSourcePriority($metric: HealthMetric!, $dataOrigins: [String!]!, $timeZone: String!) {
+    health {
+      setSourcePriority(metric: $metric, dataOrigins: $dataOrigins, timeZone: $timeZone) {
+        metric
+      }
+    }
+  }
+`);
+
+export function useSetSourcePriority() {
+  return useGqlMutation(SetSourcePriority, { invalidate: [SourcePriority, QuantitySeries] });
 }

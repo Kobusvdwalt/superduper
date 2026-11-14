@@ -46,6 +46,9 @@ function ShellDevice({ shell }: { shell: Shell }) {
             onSyncNow: () => actions.syncNow.mutate(),
             onAutoSyncChange: (enabled) => actions.setAutoSync.mutate(enabled),
             onHistoryDaysChange: (days) => actions.setHistoryDays.mutate(days),
+            onRequestExerciseRoutes: () => actions.requestExerciseRoutes.mutate(),
+            onRequestBatteryExemption: () => actions.requestBatteryExemption.mutate(),
+            onOpenAutostartSettings: () => actions.openAutostartSettings.mutate(),
           }}
         />
       )}

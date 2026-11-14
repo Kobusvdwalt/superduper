@@ -16,6 +16,7 @@ import {
   type syncBatches,
 } from "../../db/schema";
 import { HEALTH_METRIC_UNITS } from "../../health/projection/project";
+import type { SourceMode, sourcePriority } from "../../health/sources";
 import type { HealthSyncResult } from "../../health/types";
 import { builder } from "../builder";
 import { ClientType } from "../identity/types";
@@ -91,26 +92,121 @@ const QuantitySampleType = builder
 
 export const QuantitySamplePage = pageType("HealthQuantitySamplePage", QuantitySampleType);
 
-const QuantityBucketType = builder
-  .objectRef<{ bucketStart: Date; value: number; count: number }>("HealthQuantityBucket")
-  .implement({
-    fields: (t) => ({
-      bucketStart: t.expose("bucketStart", { type: "DateTime" }),
-      value: t.exposeFloat("value"),
-      count: t.exposeInt("count", { description: "Samples in the bucket." }),
+export const HealthSourceModeEnum = builder.enumType("HealthSourceMode", {
+  values: {
+    PREFERRED: {
+      description:
+        "Per local day, only the highest-priority data origin with samples that day (see `HealthQuery.sourcePriority`). Intervals that overlap within a day are not split between origins.",
+    },
+    ALL: { description: "Every sample; overlapping origins of a cumulative metric add up." },
+  } as const,
+});
+
+type SeriesBucket = {
+  bucketStart: Date;
+  value: number;
+  count: number;
+  dataOrigins: (string | null)[];
+};
+type SeriesSource = { dataOrigin: string | null; days: number; samples: number };
+
+const QuantityBucketType = builder.objectRef<SeriesBucket>("HealthQuantityBucket").implement({
+  fields: (t) => ({
+    bucketStart: t.expose("bucketStart", { type: "DateTime" }),
+    value: t.exposeFloat("value"),
+    count: t.exposeInt("count", { description: "Samples in the bucket." }),
+    dataOrigins: t.field({
+      type: ["String"],
+      nullable: { list: false, items: true },
+      description: "Origins whose samples are in the bucket; null for samples without one.",
+      resolve: (bucket) => bucket.dataOrigins,
     }),
-  });
+  }),
+});
+
+const SeriesSourceType = builder.objectRef<SeriesSource>("HealthSeriesSource").implement({
+  description: "One data origin that contributed to a series.",
+  fields: (t) => ({
+    dataOrigin: t.exposeString("dataOrigin", { nullable: true }),
+    days: t.exposeInt("days", { description: "Local days it contributed to." }),
+    samples: t.exposeInt("samples"),
+  }),
+});
 
 export const QuantitySeriesType = builder
   .objectRef<{
     metric: HealthMetric;
-    buckets: { bucketStart: Date; value: number; count: number }[];
+    cumulative: boolean;
+    sourceMode: SourceMode;
+    buckets: SeriesBucket[];
+    sources: SeriesSource[];
   }>("HealthQuantitySeries")
   .implement({
     fields: (t) => ({
       metric: t.expose("metric", { type: HealthMetricEnum }),
       unit: t.string({ ...unitField, resolve: (series) => HEALTH_METRIC_UNITS[series.metric] }),
+      cumulative: t.exposeBoolean("cumulative", {
+        description: "Whether the metric's samples add up (steps, distance, energy, …).",
+      }),
+      sourceMode: t.expose("sourceMode", {
+        type: HealthSourceModeEnum,
+        description:
+          "The mode applied: PREFERRED only for a cumulative metric without `dataOrigin`, ALL otherwise.",
+      }),
       buckets: t.field({ type: [QuantityBucketType], resolve: (series) => series.buckets }),
+      sources: t.field({
+        type: [SeriesSourceType],
+        description: "The origins the buckets are built from, most days first.",
+        resolve: (series) => series.sources,
+      }),
+    }),
+  });
+
+const SourceRankType = builder
+  .objectRef<{
+    dataOrigin: string | null;
+    rank: number;
+    saved: boolean;
+    days: number;
+    samples: number;
+    firstTime: Date;
+    lastTime: Date;
+  }>("HealthSourceRank")
+  .implement({
+    fields: (t) => ({
+      dataOrigin: t.exposeString("dataOrigin", { nullable: true }),
+      rank: t.exposeInt("rank", { description: "1 is the highest priority." }),
+      saved: t.exposeBoolean("saved", {
+        description: "True when the rank comes from the saved order, false when from the default.",
+      }),
+      days: t.exposeInt("days", { description: "Local days with samples, over all time." }),
+      samples: t.exposeInt("samples"),
+      firstTime: t.expose("firstTime", { type: "DateTime" }),
+      lastTime: t.expose("lastTime", { type: "DateTime" }),
+    }),
+  });
+
+export const SourcePriorityType = builder
+  .objectRef<{
+    metric: HealthMetric;
+    cumulative: boolean;
+    savedOrder: string[];
+    origins: Awaited<ReturnType<typeof sourcePriority>>["origins"];
+  }>("HealthSourcePriority")
+  .implement({
+    description:
+      "The order in effect for PREFERRED series: the saved order first, then by default the origin with most local days covered, then most samples, then name.",
+    fields: (t) => ({
+      metric: t.expose("metric", { type: HealthMetricEnum }),
+      cumulative: t.exposeBoolean("cumulative"),
+      savedOrder: t.exposeStringList("savedOrder", {
+        description: "The user's saved order, highest first; empty when none is saved.",
+      }),
+      origins: t.field({
+        type: [SourceRankType],
+        description: "Every origin with samples of the metric, in effective priority order.",
+        resolve: (priority) => priority.origins,
+      }),
     }),
   });
 
@@ -277,6 +373,11 @@ const RawRecordVersionType = builder
       modifiedAt: t.expose("modifiedAt", { type: "DateTime", nullable: true }),
       deletedAt: t.expose("deletedAt", { type: "DateTime", nullable: true }),
       receivedAt: t.expose("receivedAt", { type: "DateTime" }),
+      clientId: t.expose("clientId", {
+        type: "UUID",
+        nullable: true,
+        description: "The client this version was first received from; null once deleted.",
+      }),
       schemaVersion: t.exposeInt("schemaVersion"),
       syncBatchId: t.expose("syncBatchId", { type: "UUID" }),
       payload: t.expose("payload", { type: "JSON", nullable: true }),
@@ -289,7 +390,12 @@ export const RawRecordType = builder
     description: "A record exactly as the client pushed it; the source of every typed table.",
     fields: (t) => ({
       id: t.expose("id", { type: "UUID" }),
-      clientId: t.expose("clientId", { type: "UUID" }),
+      clientId: t.expose("clientId", {
+        type: "UUID",
+        nullable: true,
+        description:
+          "The client the current state was last received from; null once that client is deleted. A record is identified per user, so every client of the user updates the same record.",
+      }),
       origin: t.expose("origin", { type: HealthOriginEnum }),
       recordType: t.exposeString("recordType"),
       sourceRecordId: t.exposeString("sourceRecordId"),
@@ -362,7 +468,11 @@ const SyncBatchType = builder
     fields: (t) => ({
       id: t.expose("id", { type: "UUID" }),
       batchId: t.expose("batchId", { type: "UUID", description: "The client's idempotency key." }),
-      clientId: t.expose("clientId", { type: "UUID" }),
+      clientId: t.expose("clientId", {
+        type: "UUID",
+        nullable: true,
+        description: "Null once the client is deleted.",
+      }),
       schemaVersion: t.exposeInt("schemaVersion"),
       recordCount: t.exposeInt("recordCount"),
       deletionCount: t.exposeInt("deletionCount"),

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="health_rationale_title">How Super Duper uses your health data</string>
+    <string name="health_rationale_body">Super Duper is your personal life-history archive.\n\nIt only reads Health Connect data. It never writes to Health Connect.\n\nRecords you allow are sent, complete and unmodified, to the Super Duper server you paired this phone with, using a revocable client token. Nothing is sent anywhere else and there is no analytics or advertising code.\n\nOn the phone the app keeps only what it needs to sync: Health Connect change cursors, the ids of records already sent, and an outgoing queue that is encrypted with an Android Keystore key. Android backup is disabled.\n\nBackground and history access let the app sync hourly and include records older than 30 days. You can revoke any access in Health Connect at any time. Unpairing in the app deletes the local sync state; data already on your server must be removed there.</string>
+</resources>

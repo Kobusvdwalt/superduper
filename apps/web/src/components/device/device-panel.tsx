@@ -16,7 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDateTime, formatNumber, humanize } from "@/lib/format";
-import type { Availability, Grant, HealthStatus } from "@/lib/shell";
+import type { Availability, Grant, HealthStatus, Power } from "@/lib/shell";
 
 export function NotInShell() {
   return (
@@ -46,6 +46,9 @@ export type DevicePanelHandlers = {
   onSyncNow: () => void;
   onAutoSyncChange: (enabled: boolean) => void;
   onHistoryDaysChange: (days: number) => void;
+  onRequestExerciseRoutes: () => void;
+  onRequestBatteryExemption: () => void;
+  onOpenAutostartSettings: () => void;
 };
 
 export function DevicePanel({
@@ -59,7 +62,7 @@ export function DevicePanel({
   error: Error | null;
   handlers: DevicePanelHandlers;
 }) {
-  const { availability, permissions, pairing, settings, sync } = status;
+  const { availability, permissions, power, pairing, settings, sync } = status;
   const available = availability === "available";
 
   return (
@@ -100,7 +103,25 @@ export function DevicePanel({
             </Button>
           </div>
         )}
+        {available ? (
+          <ExerciseRoutes
+            grant={permissions.exerciseRoutes}
+            busy={busy}
+            onRequest={handlers.onRequestExerciseRoutes}
+          />
+        ) : null}
       </Section>
+
+      {availability === "unsupported_platform" ? null : (
+        <Section title="Background sync">
+          <BackgroundSync
+            power={power}
+            busy={busy}
+            onRequestBatteryExemption={handlers.onRequestBatteryExemption}
+            onOpenAutostartSettings={handlers.onOpenAutostartSettings}
+          />
+        </Section>
+      )}
 
       {available ? (
         <>
@@ -132,6 +153,7 @@ export function DevicePanel({
                   `${formatNumber(sync.queuedBatches)} batches, ${formatNumber(sync.queuedRecords)} records, ${formatNumber(sync.queuedDeletions)} deletions`,
                 ],
                 ["Rejected batches", formatNumber(sync.rejectedBatches)],
+                ["Next retry", sync.nextRetryAt ? formatDateTime(sync.nextRetryAt) : "—"],
               ]}
             />
             <div className="mt-3 flex flex-wrap items-center gap-4">
@@ -166,6 +188,116 @@ export function DevicePanel({
         </>
       ) : null}
     </>
+  );
+}
+
+function ExerciseRoutes({
+  grant,
+  busy,
+  onRequest,
+}: {
+  grant: Grant;
+  busy: boolean;
+  onRequest: () => void;
+}) {
+  if (grant === "granted") return null;
+  if (grant === "unsupported") {
+    return (
+      <p className="mt-3 text-sm text-muted-foreground">
+        This Android version shares exercise routes only one workout at a time, so workouts are sent
+        without their route.
+      </p>
+    );
+  }
+  return (
+    <div className="mt-4 flex flex-col gap-2 text-sm">
+      <p>
+        Workouts are sent without their route. Health Connect's “Allow all” does not include
+        exercise routes; they need their own approval. Tap the button and choose “Allow all routes”
+        (not “Allow this route”). If Health Connect opens its settings instead, set Exercise routes
+        for Super Duper to allow all. Workouts already sent are then sent again with their routes.
+      </p>
+      <div>
+        <Button variant="outline" onClick={onRequest} disabled={busy}>
+          Allow exercise routes
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function BackgroundSync({
+  power,
+  busy,
+  onRequestBatteryExemption,
+  onOpenAutostartSettings,
+}: {
+  power: Power;
+  busy: boolean;
+  onRequestBatteryExemption: () => void;
+  onOpenAutostartSettings: () => void;
+}) {
+  const optimized = power.batteryOptimization === "optimized";
+  return (
+    <div className="flex flex-col gap-3 text-sm">
+      <p>
+        The hourly sync runs only when Android lets the app work in the background. Battery
+        optimisation delays or skips it, and on Xiaomi (HyperOS, MIUI) and similar phones the job
+        does not run at all unless Autostart is on for Super Duper.
+      </p>
+      <Facts
+        items={[
+          [
+            "Battery optimisation",
+            <Badge key="o" variant={optimized ? "outline" : "secondary"}>
+              {power.batteryOptimization === "exempt"
+                ? "Exempt"
+                : optimized
+                  ? "Optimised"
+                  : "Unsupported"}
+            </Badge>,
+          ],
+          [
+            "Background activity",
+            power.backgroundRestricted === null
+              ? "—"
+              : power.backgroundRestricted
+                ? "Restricted"
+                : "Allowed",
+          ],
+          [
+            "Autostart",
+            power.autostartSettings === "available"
+              ? "Check in the phone's settings"
+              : "No autostart setting on this phone",
+          ],
+        ]}
+      />
+      {power.backgroundRestricted ? (
+        <p className="text-destructive">
+          Background activity is restricted for Super Duper in the phone's battery settings. Set it
+          to unrestricted there.
+        </p>
+      ) : null}
+      <div className="flex flex-wrap gap-2">
+        {optimized ? (
+          <Button onClick={onRequestBatteryExemption} disabled={busy}>
+            Stop optimising battery
+          </Button>
+        ) : null}
+        {power.autostartSettings === "available" ? (
+          <Button variant="outline" onClick={onOpenAutostartSettings} disabled={busy}>
+            Open autostart settings
+          </Button>
+        ) : null}
+      </div>
+      {power.autostartSettings === "available" ? (
+        <p className="text-xs text-muted-foreground">
+          The phone does not tell the app whether Autostart is on; turn it on for Super Duper in the
+          screen that opens.
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -260,7 +392,10 @@ function TypesTable({ types }: { types: HealthStatus["sync"]["types"] }) {
           .map((type) => (
             <TableRow key={type.recordType}>
               <TableCell>{type.recordType}</TableCell>
-              <TableCell>{humanize(type.state)}</TableCell>
+              <TableCell>
+                {humanize(type.state)}
+                {type.reread ? ` (re-read ${type.reread})` : ""}
+              </TableCell>
               <TableCell className="text-right">{formatNumber(type.knownRecords)}</TableCell>
               <TableCell className="text-right">{formatNumber(type.queuedRecords)}</TableCell>
               <TableCell className="text-right">{formatNumber(type.sentRecords)}</TableCell>

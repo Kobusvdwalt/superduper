@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "local-setup",
+  "description": "The bundled server-URL page only. The configured server origin is granted at runtime (src/ipc.rs) because it is chosen by the user.",
+  "windows": ["main"],
+  "local": true,
+  "permissions": ["allow-shell-info", "allow-get-server-url", "allow-set-server-url"]
+}

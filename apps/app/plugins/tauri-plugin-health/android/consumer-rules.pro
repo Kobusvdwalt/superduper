@@ -1,0 +1,3 @@
+-keep class com.kobus.superduper.health.HealthPlugin { *; }
+-keep class com.kobus.superduper.health.*Args { *; }
+-keep class com.kobus.superduper.health.HealthSyncWorker { *; }
