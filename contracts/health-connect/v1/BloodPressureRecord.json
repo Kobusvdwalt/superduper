@@ -1,0 +1,37 @@
+{
+  "origin": "HEALTH_CONNECT",
+  "recordType": "BloodPressureRecord",
+  "sourceRecordId": "00000000-0000-4000-8000-000000000005",
+  "dataOrigin": "com.example.diary",
+  "startTime": "2026-11-10T07:20:00Z",
+  "endTime": null,
+  "startZoneOffsetSeconds": 7200,
+  "endZoneOffsetSeconds": null,
+  "modifiedAt": "2026-11-10T09:00:00Z",
+  "payload": {
+    "time": "2026-11-10T07:20:00Z",
+    "zoneOffsetSeconds": 7200,
+    "systolic": {
+      "value": 118.0,
+      "unit": "millimetersOfMercury"
+    },
+    "diastolic": {
+      "value": 76.0,
+      "unit": "millimetersOfMercury"
+    },
+    "bodyPosition": 2,
+    "bodyPositionName": "SITTING_DOWN",
+    "measurementLocation": 3,
+    "measurementLocationName": "LEFT_UPPER_ARM",
+    "metadata": {
+      "id": "00000000-0000-4000-8000-000000000005",
+      "dataOrigin": "com.example.diary",
+      "lastModifiedTime": "2026-11-10T09:00:00Z",
+      "clientRecordId": null,
+      "clientRecordVersion": 0,
+      "recordingMethod": 3,
+      "recordingMethodName": "MANUAL_ENTRY",
+      "device": null
+    }
+  }
+}

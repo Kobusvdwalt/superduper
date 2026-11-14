@@ -1,0 +1,48 @@
+{
+  "origin": "HEALTH_CONNECT",
+  "recordType": "PowerRecord",
+  "sourceRecordId": "00000000-0000-4000-8000-000000000029",
+  "dataOrigin": "com.example.fitness",
+  "startTime": "2026-11-10T16:00:00Z",
+  "endTime": "2026-11-10T16:01:00Z",
+  "startZoneOffsetSeconds": 7200,
+  "endZoneOffsetSeconds": 7200,
+  "modifiedAt": "2026-11-10T09:00:00Z",
+  "payload": {
+    "startTime": "2026-11-10T16:00:00Z",
+    "startZoneOffsetSeconds": 7200,
+    "endTime": "2026-11-10T16:01:00Z",
+    "endZoneOffsetSeconds": 7200,
+    "samples": [
+      {
+        "time": "2026-11-10T16:00:00Z",
+        "power": {
+          "value": 185.0,
+          "unit": "watts"
+        }
+      },
+      {
+        "time": "2026-11-10T16:00:30Z",
+        "power": {
+          "value": 240.5,
+          "unit": "watts"
+        }
+      }
+    ],
+    "metadata": {
+      "id": "00000000-0000-4000-8000-000000000029",
+      "dataOrigin": "com.example.fitness",
+      "lastModifiedTime": "2026-11-10T09:00:00Z",
+      "clientRecordId": null,
+      "clientRecordVersion": 0,
+      "recordingMethod": 1,
+      "recordingMethodName": "ACTIVELY_RECORDED",
+      "device": {
+        "manufacturer": "Example",
+        "model": "Watch 1",
+        "type": 1,
+        "typeName": "WATCH"
+      }
+    }
+  }
+}

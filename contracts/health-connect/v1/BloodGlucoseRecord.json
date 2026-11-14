@@ -1,0 +1,35 @@
+{
+  "origin": "HEALTH_CONNECT",
+  "recordType": "BloodGlucoseRecord",
+  "sourceRecordId": "00000000-0000-4000-8000-000000000004",
+  "dataOrigin": "com.example.diary",
+  "startTime": "2026-11-10T07:15:00Z",
+  "endTime": null,
+  "startZoneOffsetSeconds": 7200,
+  "endZoneOffsetSeconds": null,
+  "modifiedAt": "2026-11-10T09:00:00Z",
+  "payload": {
+    "time": "2026-11-10T07:15:00Z",
+    "zoneOffsetSeconds": 7200,
+    "level": {
+      "value": 5.4,
+      "unit": "millimolesPerLiter"
+    },
+    "specimenSource": 2,
+    "specimenSourceName": "CAPILLARY_BLOOD",
+    "mealType": 1,
+    "mealTypeName": "BREAKFAST",
+    "relationToMeal": 3,
+    "relationToMealName": "BEFORE_MEAL",
+    "metadata": {
+      "id": "00000000-0000-4000-8000-000000000004",
+      "dataOrigin": "com.example.diary",
+      "lastModifiedTime": "2026-11-10T09:00:00Z",
+      "clientRecordId": null,
+      "clientRecordVersion": 0,
+      "recordingMethod": 3,
+      "recordingMethodName": "MANUAL_ENTRY",
+      "device": null
+    }
+  }
+}

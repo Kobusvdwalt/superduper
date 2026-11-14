@@ -1,0 +1,27 @@
+{
+  "origin": "HEALTH_CONNECT",
+  "recordType": "MenstruationPeriodRecord",
+  "sourceRecordId": "00000000-0000-4000-8000-000000000023",
+  "dataOrigin": "com.example.cycle",
+  "startTime": "2026-11-08T00:00:00Z",
+  "endTime": "2026-11-12T00:00:00Z",
+  "startZoneOffsetSeconds": 7200,
+  "endZoneOffsetSeconds": 7200,
+  "modifiedAt": "2026-11-10T09:00:00Z",
+  "payload": {
+    "startTime": "2026-11-08T00:00:00Z",
+    "startZoneOffsetSeconds": 7200,
+    "endTime": "2026-11-12T00:00:00Z",
+    "endZoneOffsetSeconds": 7200,
+    "metadata": {
+      "id": "00000000-0000-4000-8000-000000000023",
+      "dataOrigin": "com.example.cycle",
+      "lastModifiedTime": "2026-11-10T09:00:00Z",
+      "clientRecordId": null,
+      "clientRecordVersion": 0,
+      "recordingMethod": 3,
+      "recordingMethodName": "MANUAL_ENTRY",
+      "device": null
+    }
+  }
+}

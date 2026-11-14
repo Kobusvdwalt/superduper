@@ -1,0 +1,129 @@
+{
+  "origin": "HEALTH_CONNECT",
+  "recordType": "NutritionRecord",
+  "sourceRecordId": "00000000-0000-4000-8000-000000000025",
+  "dataOrigin": "com.example.diary",
+  "startTime": "2026-11-10T06:30:00Z",
+  "endTime": "2026-11-10T06:45:00Z",
+  "startZoneOffsetSeconds": 7200,
+  "endZoneOffsetSeconds": 7200,
+  "modifiedAt": "2026-11-10T09:00:00Z",
+  "payload": {
+    "startTime": "2026-11-10T06:30:00Z",
+    "startZoneOffsetSeconds": 7200,
+    "endTime": "2026-11-10T06:45:00Z",
+    "endZoneOffsetSeconds": 7200,
+    "biotin": null,
+    "caffeine": {
+      "value": 9e-05,
+      "unit": "kilograms"
+    },
+    "calcium": {
+      "value": 0.00025,
+      "unit": "kilograms"
+    },
+    "chloride": null,
+    "cholesterol": {
+      "value": 0.000185,
+      "unit": "kilograms"
+    },
+    "chromium": null,
+    "copper": null,
+    "dietaryFiber": {
+      "value": 0.004,
+      "unit": "kilograms"
+    },
+    "folate": null,
+    "folicAcid": null,
+    "iodine": null,
+    "iron": {
+      "value": 2.1e-06,
+      "unit": "kilograms"
+    },
+    "magnesium": null,
+    "manganese": null,
+    "molybdenum": null,
+    "monounsaturatedFat": {
+      "value": 0.0045,
+      "unit": "kilograms"
+    },
+    "niacin": null,
+    "pantothenicAcid": null,
+    "phosphorus": null,
+    "polyunsaturatedFat": {
+      "value": 0.0018,
+      "unit": "kilograms"
+    },
+    "potassium": {
+      "value": 0.00042,
+      "unit": "kilograms"
+    },
+    "protein": {
+      "value": 0.0182,
+      "unit": "kilograms"
+    },
+    "riboflavin": null,
+    "saturatedFat": {
+      "value": 0.0036,
+      "unit": "kilograms"
+    },
+    "selenium": null,
+    "sodium": {
+      "value": 0.00051,
+      "unit": "kilograms"
+    },
+    "sugar": {
+      "value": 0.0062,
+      "unit": "kilograms"
+    },
+    "thiamin": null,
+    "totalCarbohydrate": {
+      "value": 0.0415,
+      "unit": "kilograms"
+    },
+    "totalFat": {
+      "value": 0.0121,
+      "unit": "kilograms"
+    },
+    "transFat": {
+      "value": 0.0,
+      "unit": "kilograms"
+    },
+    "unsaturatedFat": null,
+    "vitaminA": null,
+    "vitaminB12": null,
+    "vitaminB6": null,
+    "vitaminC": {
+      "value": 1.2e-05,
+      "unit": "kilograms"
+    },
+    "vitaminD": {
+      "value": 2.5e-09,
+      "unit": "kilograms"
+    },
+    "vitaminE": null,
+    "vitaminK": null,
+    "zinc": null,
+    "energy": {
+      "value": 356.0,
+      "unit": "kilocalories"
+    },
+    "energyFromFat": {
+      "value": 108.9,
+      "unit": "kilocalories"
+    },
+    "name": "Oats with yoghurt",
+    "mealType": 1,
+    "mealTypeName": "BREAKFAST",
+    "metadata": {
+      "id": "00000000-0000-4000-8000-000000000025",
+      "dataOrigin": "com.example.diary",
+      "lastModifiedTime": "2026-11-10T09:00:00Z",
+      "clientRecordId": null,
+      "clientRecordVersion": 0,
+      "recordingMethod": 3,
+      "recordingMethodName": "MANUAL_ENTRY",
+      "device": null
+    }
+  }
+}

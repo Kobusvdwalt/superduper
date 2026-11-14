@@ -1,0 +1,31 @@
+{
+  "origin": "HEALTH_CONNECT",
+  "recordType": "HydrationRecord",
+  "sourceRecordId": "00000000-0000-4000-8000-000000000019",
+  "dataOrigin": "com.example.diary",
+  "startTime": "2026-11-10T10:00:00Z",
+  "endTime": "2026-11-10T10:05:00Z",
+  "startZoneOffsetSeconds": 7200,
+  "endZoneOffsetSeconds": 7200,
+  "modifiedAt": "2026-11-10T09:00:00Z",
+  "payload": {
+    "startTime": "2026-11-10T10:00:00Z",
+    "startZoneOffsetSeconds": 7200,
+    "endTime": "2026-11-10T10:05:00Z",
+    "endZoneOffsetSeconds": 7200,
+    "volume": {
+      "value": 0.33,
+      "unit": "liters"
+    },
+    "metadata": {
+      "id": "00000000-0000-4000-8000-000000000019",
+      "dataOrigin": "com.example.diary",
+      "lastModifiedTime": "2026-11-10T09:00:00Z",
+      "clientRecordId": "hydration-2026-11-10-1",
+      "clientRecordVersion": 3,
+      "recordingMethod": 3,
+      "recordingMethodName": "MANUAL_ENTRY",
+      "device": null
+    }
+  }
+}

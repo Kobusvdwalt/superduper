@@ -1,0 +1,548 @@
+"""A device or connector that pushes data with its own token."""
+type Client {
+  createdAt: DateTime!
+  id: UUID!
+  kind: ClientKind!
+  lastSeenAt: DateTime
+  name: String!
+
+  """For example `android`."""
+  platform: String
+  revokedAt: DateTime
+}
+
+enum ClientKind {
+  CONNECTOR
+  DEVICE
+}
+
+input CreateClientInput {
+  kind: ClientKind!
+  name: String!
+  platform: String
+}
+
+type CreatedClient {
+  client: Client!
+
+  """The bearer token. It is shown only here and cannot be retrieved later."""
+  token: String!
+}
+
+"""
+A date-time string at UTC, such as 2007-12-03T10:15:30Z, compliant with the `date-time` format outlined in section 5.6 of the RFC 3339 profile of the ISO 8601 standard for representation of dates and times using the Gregorian calendar.This scalar is serialized to a string in ISO 8601 format and parsed from a string in ISO 8601 format.
+"""
+scalar DateTime
+
+enum HealthAggregation {
+  AVG
+  COUNT
+  MAX
+  MIN
+  SUM
+}
+
+enum HealthBucket {
+  DAY
+  HOUR
+  MONTH
+  WEEK
+}
+
+type HealthClientSync {
+  batches: Int!
+  client: Client!
+  lastSyncedAt: DateTime!
+}
+
+"""
+A numeric health measurement. Each has one canonical unit; see `HealthMetricCoverage.unit`.
+"""
+enum HealthMetric {
+  ACTIVE_ENERGY_BURNED
+  BASAL_BODY_TEMPERATURE
+  BASAL_METABOLIC_RATE
+  BLOOD_GLUCOSE
+  BLOOD_PRESSURE_DIASTOLIC
+  BLOOD_PRESSURE_SYSTOLIC
+  BODY_FAT
+  BODY_TEMPERATURE
+  BODY_WATER_MASS
+  BONE_MASS
+  CYCLING_PEDALING_CADENCE
+  DISTANCE
+  ELEVATION_GAINED
+  FLOORS_CLIMBED
+  HEART_RATE
+  HEART_RATE_VARIABILITY_RMSSD
+  HEIGHT
+  HYDRATION
+  LEAN_BODY_MASS
+  OXYGEN_SATURATION
+  POWER
+  RESPIRATORY_RATE
+  RESTING_HEART_RATE
+  SKIN_TEMPERATURE_BASELINE
+  SKIN_TEMPERATURE_DELTA
+  SPEED
+  STEPS
+  STEPS_CADENCE
+  TOTAL_ENERGY_BURNED
+  VO2_MAX
+  WEIGHT
+  WHEELCHAIR_PUSHES
+}
+
+type HealthMetricCoverage {
+  count: Int!
+  dataOrigin: String
+  firstTime: DateTime
+  lastTime: DateTime
+  metric: HealthMetric!
+
+  """Canonical unit of every value of this metric."""
+  unit: String!
+}
+
+"""Writes in the health domain."""
+type HealthMutation {
+  """Applies one batch of records and deletions. Clients only."""
+  sync(input: HealthSyncInput!): HealthSyncResult!
+}
+
+type HealthNutrientAmount {
+  """For example `vitaminC`."""
+  nutrient: String!
+
+  """`grams`, or `kilocalories` for energy."""
+  unit: String!
+  value: Float!
+}
+
+type HealthNutritionEntry {
+  dataOrigin: String
+  dietaryFiberGrams: Float
+  endTime: DateTime!
+  energyKilocalories: Float
+  id: UUID!
+
+  """e.g. `BREAKFAST`."""
+  mealType: String
+  name: String
+
+  """Every other nutrient the entry records."""
+  nutrients: [HealthNutrientAmount!]!
+  proteinGrams: Float
+  rawRecordId: UUID!
+  startTime: DateTime!
+  sugarGrams: Float
+  totalCarbohydrateGrams: Float
+  totalFatGrams: Float
+}
+
+type HealthNutritionEntryPage {
+  items: [HealthNutritionEntry!]!
+
+  """Pass as `after` for the next page; null on the last page."""
+  nextCursor: String
+}
+
+enum HealthOrigin {
+  HEALTH_CONNECT
+}
+
+type HealthQuantityBucket {
+  bucketStart: DateTime!
+
+  """Samples in the bucket."""
+  count: Int!
+  value: Float!
+}
+
+type HealthQuantitySample {
+  dataOrigin: String
+
+  """Null for an instantaneous measurement."""
+  endTime: DateTime
+  id: UUID!
+  metric: HealthMetric!
+  rawRecordId: UUID!
+  startTime: DateTime!
+
+  """Canonical unit of every value of this metric."""
+  unit: String!
+  value: Float!
+}
+
+type HealthQuantitySamplePage {
+  items: [HealthQuantitySample!]!
+
+  """Pass as `after` for the next page; null on the last page."""
+  nextCursor: String
+}
+
+type HealthQuantitySeries {
+  buckets: [HealthQuantityBucket!]!
+  metric: HealthMetric!
+
+  """Canonical unit of every value of this metric."""
+  unit: String!
+}
+
+"""Reads in the health domain."""
+type HealthQuery {
+  """The last health sync of every client that has synced."""
+  clientSyncs: [HealthClientSync!]!
+
+  """Coverage per metric and data origin."""
+  metrics: [HealthMetricCoverage!]!
+  nutritionEntries(
+    after: String
+
+    """Only rows written by this app."""
+    dataOrigin: String
+
+    """Inclusive start time."""
+    from: DateTime
+
+    """Defaults to 100; clamped to 1000."""
+    limit: Int
+
+    """Exclusive start time."""
+    to: DateTime
+  ): HealthNutritionEntryPage!
+
+  """Samples of one metric in start-time order."""
+  quantitySamples(
+    after: String
+
+    """Only rows written by this app."""
+    dataOrigin: String
+
+    """Inclusive start time."""
+    from: DateTime
+
+    """Defaults to 100; clamped to 1000."""
+    limit: Int
+    metric: HealthMetric!
+
+    """Exclusive start time."""
+    to: DateTime
+  ): HealthQuantitySamplePage!
+
+  """
+  One metric aggregated into calendar buckets of `timeZone`. Samples count towards the bucket their start time falls in; empty buckets are omitted.
+  """
+  quantitySeries(
+    aggregation: HealthAggregation!
+    bucket: HealthBucket!
+    dataOrigin: String
+    from: DateTime!
+    metric: HealthMetric!
+
+    """IANA name, e.g. `Africa/Johannesburg`."""
+    timeZone: String = "UTC"
+    to: DateTime!
+  ): HealthQuantitySeries!
+
+  """Stored records with their payloads, in start-time order."""
+  rawRecords(
+    after: String
+
+    """Only rows written by this app."""
+    dataOrigin: String
+
+    """Inclusive start time."""
+    from: DateTime
+    includeDeleted: Boolean = false
+
+    """Defaults to 100; clamped to 1000."""
+    limit: Int
+    recordType: String
+
+    """Exclusive start time."""
+    to: DateTime
+  ): HealthRawRecordPage!
+
+  """Coverage per raw record type and data origin, raw-only types included."""
+  recordTypes: [HealthRecordTypeCoverage!]!
+  sleepSessions(
+    after: String
+
+    """Only rows written by this app."""
+    dataOrigin: String
+
+    """Inclusive start time."""
+    from: DateTime
+
+    """Defaults to 100; clamped to 1000."""
+    limit: Int
+
+    """Exclusive start time."""
+    to: DateTime
+  ): HealthSleepSessionPage!
+
+  """Applied batches, newest first."""
+  syncBatches(after: String, clientId: UUID, limit: Int): HealthSyncBatchPage!
+  workouts(
+    after: String
+
+    """Only rows written by this app."""
+    dataOrigin: String
+
+    """Inclusive start time."""
+    from: DateTime
+
+    """Defaults to 100; clamped to 1000."""
+    limit: Int
+
+    """Exclusive start time."""
+    to: DateTime
+  ): HealthWorkoutPage!
+}
+
+"""
+A record exactly as the client pushed it; the source of every typed table.
+"""
+type HealthRawRecord {
+  clientId: UUID!
+  dataOrigin: String
+  deletedAt: DateTime
+  endTime: DateTime
+  endZoneOffsetSeconds: Int
+  id: UUID!
+  modifiedAt: DateTime!
+  origin: HealthOrigin!
+  payload: JSON!
+
+  """Why the typed projection failed; the record itself is still stored."""
+  projectionError: String
+  receivedAt: DateTime!
+  recordType: String!
+  schemaVersion: Int!
+  sourceRecordId: String!
+  startTime: DateTime!
+  startZoneOffsetSeconds: Int
+}
+
+type HealthRawRecordPage {
+  items: [HealthRawRecord!]!
+
+  """Pass as `after` for the next page; null on the last page."""
+  nextCursor: String
+}
+
+input HealthRecordDeletionInput {
+  deletedAt: DateTime!
+  origin: HealthOrigin!
+  recordType: String!
+  sourceRecordId: String!
+}
+
+"""One record as read from the origin. See docs/health-sync-contract.md."""
+input HealthRecordInput {
+  dataOrigin: String
+  endTime: DateTime
+  endZoneOffsetSeconds: Int
+  modifiedAt: DateTime!
+  origin: HealthOrigin!
+  payload: JSON!
+
+  """For example `HeartRateRecord`."""
+  recordType: String!
+  sourceRecordId: String!
+  startTime: DateTime!
+  startZoneOffsetSeconds: Int
+}
+
+type HealthRecordTypeCoverage {
+  count: Int!
+  dataOrigin: String
+  firstTime: DateTime
+  lastTime: DateTime
+  projectionErrors: Int!
+  recordType: String!
+}
+
+type HealthRoutePoint {
+  altitudeMeters: Float
+  horizontalAccuracyMeters: Float
+  latitude: Float!
+  longitude: Float!
+  time: DateTime!
+  verticalAccuracyMeters: Float
+}
+
+enum HealthRouteStatus {
+  CONSENT_REQUIRED
+  DATA
+  NO_DATA
+}
+
+type HealthSleepSession {
+  dataOrigin: String
+  endTime: DateTime!
+  endZoneOffsetSeconds: Int
+  id: UUID!
+  notes: String
+  rawRecordId: UUID!
+  stages: [HealthSleepStageInterval!]!
+  startTime: DateTime!
+  startZoneOffsetSeconds: Int
+  title: String
+}
+
+type HealthSleepSessionPage {
+  items: [HealthSleepSession!]!
+
+  """Pass as `after` for the next page; null on the last page."""
+  nextCursor: String
+}
+
+enum HealthSleepStage {
+  AWAKE
+  AWAKE_IN_BED
+  DEEP
+  LIGHT
+  OUT_OF_BED
+  REM
+  SLEEPING
+  UNKNOWN
+}
+
+type HealthSleepStageInterval {
+  endTime: DateTime!
+  stage: HealthSleepStage!
+  startTime: DateTime!
+}
+
+type HealthSyncBatch {
+  """The client's idempotency key."""
+  batchId: UUID!
+  clientId: UUID!
+  deletionCount: Int!
+  id: UUID!
+  receivedAt: DateTime!
+  recordCount: Int!
+  schemaVersion: Int!
+}
+
+type HealthSyncBatchPage {
+  items: [HealthSyncBatch!]!
+
+  """Pass as `after` for the next page; null on the last page."""
+  nextCursor: String
+}
+
+input HealthSyncInput {
+  batchId: UUID!
+  deletions: [HealthRecordDeletionInput!]!
+  records: [HealthRecordInput!]!
+  schemaVersion: Int!
+}
+
+type HealthSyncResult {
+  acceptedDeletions: Int!
+  acceptedRecords: Int!
+  batchId: UUID!
+
+  """True when this batchId was already applied; nothing changed."""
+  replayed: Boolean!
+}
+
+type HealthWorkout {
+  """
+  The origin's activity constant name, e.g. `RUNNING`; `UNKNOWN` if unnamed.
+  """
+  activityType: String!
+  dataOrigin: String
+  endTime: DateTime!
+  endZoneOffsetSeconds: Int
+  id: UUID!
+  laps: [HealthWorkoutLap!]!
+  notes: String
+  rawRecordId: UUID!
+  route: [HealthRoutePoint!]!
+  routeStatus: HealthRouteStatus
+  segments: [HealthWorkoutSegment!]!
+  startTime: DateTime!
+  startZoneOffsetSeconds: Int
+  title: String
+}
+
+type HealthWorkoutLap {
+  endTime: DateTime!
+  lengthMeters: Float
+  startTime: DateTime!
+}
+
+type HealthWorkoutPage {
+  items: [HealthWorkout!]!
+
+  """Pass as `after` for the next page; null on the last page."""
+  nextCursor: String
+}
+
+type HealthWorkoutSegment {
+  endTime: DateTime!
+  repetitions: Int
+  segmentType: String!
+  startTime: DateTime!
+}
+
+"""Writes in the identity domain."""
+type IdentityMutation {
+  """
+  Registers a device or connector and returns its token once. Requires a session.
+  """
+  createClient(input: CreateClientInput!): CreatedClient!
+
+  """
+  Revokes a client's token. Revoking twice keeps the first revocation time.
+  """
+  revokeClient(id: UUID!): Client!
+}
+
+"""Reads in the identity domain."""
+type IdentityQuery {
+  """
+  Every client of the caller's user, revoked ones included, newest first.
+  """
+  clients: [Client!]!
+  me: Me!
+}
+
+"""
+The `JSONObject` scalar type represents JSON objects as specified by [ECMA-404](http://www.ecma-international.org/publications/files/ECMA-ST/ECMA-404.pdf).
+"""
+scalar JSON
+
+type Me {
+  """The calling client; null for a web session."""
+  client: Client
+  user: User!
+}
+
+"""Write operations, namespaced by domain."""
+type Mutation {
+  health: HealthMutation!
+  identity: IdentityMutation!
+}
+
+"""Read operations, namespaced by domain."""
+type Query {
+  health: HealthQuery!
+  identity: IdentityQuery!
+}
+
+"""
+A field whose value is a generic Universally Unique Identifier: https://en.wikipedia.org/wiki/Universally_unique_identifier.
+"""
+scalar UUID
+
+type User {
+  createdAt: DateTime!
+  email: String!
+  id: UUID!
+  name: String!
+}
