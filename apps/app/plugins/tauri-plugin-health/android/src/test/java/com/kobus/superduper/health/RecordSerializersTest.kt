@@ -8,8 +8,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.doubleOrNull
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.io.File
 import kotlin.math.abs
@@ -83,16 +83,18 @@ class RecordSerializersTest {
     }
 
     /**
-     * Compares each serialised synthetic record with the shared fixture of the same type.
-     * Point `-Psuperduper.fixtures=<dir>` (or SUPERDUPER_FIXTURES) at
-     * contracts/health-connect/v1; by default the repository copy is used when present.
+     * Compares each serialised synthetic record with the shared fixture of the same type in
+     * contracts/health-connect/v1 (override with `-Psuperduper.fixtures=<dir>` or
+     * SUPERDUPER_FIXTURES). A missing directory or fixture fails the test.
      */
     @Test
     fun matchesContractFixtures() {
-        val dir = System.getProperty("superduper.fixtures")?.let(::File)
-        val fixtures = dir?.listFiles { file -> file.name.endsWith(".json") }.orEmpty()
+        val path = System.getProperty("superduper.fixtures")
+        assertNotNull("System property superduper.fixtures is not set", path)
+        val dir = File(path!!)
+        assertTrue("Fixture directory $dir does not exist", dir.isDirectory)
+        val fixtures = dir.listFiles { file -> file.name.endsWith(".json") }.orEmpty()
             .associateBy { it.name.removeSuffix(".json") }
-        assumeTrue("No fixtures in $dir; skipping fixture comparison", fixtures.isNotEmpty())
         val problems = mutableListOf<String>()
         for (missing in envelopes.keys - fixtures.keys) problems += "$missing: no fixture"
         for (extra in fixtures.keys - envelopes.keys) problems += "$extra: fixture for an unknown record type"
