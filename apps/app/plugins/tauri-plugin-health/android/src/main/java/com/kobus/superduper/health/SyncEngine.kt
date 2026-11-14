@@ -10,6 +10,8 @@ import androidx.health.connect.client.HealthConnectFeatures
 import androidx.health.connect.client.changes.DeletionChange
 import androidx.health.connect.client.changes.UpsertionChange
 import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.ExerciseRouteResult
+import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.request.ChangesTokenRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
@@ -22,13 +24,13 @@ import kotlinx.serialization.json.JsonPrimitive
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 
-internal enum class Trigger { FOREGROUND, BACKGROUND }
+/** [RETRY] is a one-time retry queued by [RetryPolicy]; it reads like [BACKGROUND]. */
+internal enum class Trigger { FOREGROUND, BACKGROUND, RETRY }
 
 internal class NeedsRepair(message: String) : Exception(message)
 private class QueueBackedUp(message: String) : Exception(message)
 
-/** [retryLater] asks WorkManager to back off and run again, for example after a quota error. */
-internal class RunResult(val drain: DrainResult?, val retryLater: Boolean)
+internal class RunResult(val drain: DrainResult?, val retry: RetryAction)
 
 // Health Connect reports its read quota as a RemoteException (APK provider) or a
 // HealthConnectException (platform) whose message names the quota; there is no typed error.
@@ -50,6 +52,7 @@ internal object SyncEngine {
     private const val TAG = "SuperDuperHealth"
     private const val PAGE_SIZE = 1000
     private const val QUEUE_HIGH_WATER = 20L
+    private const val ROUTE_SEARCH_PAGES = 10
     const val DEFAULT_HISTORY_DAYS = 3650
 
     private val mutex = Mutex()
@@ -83,8 +86,12 @@ internal object SyncEngine {
         false
     }
 
-    /** Every read permission this device's Health Connect can grant. */
-    fun requestablePermissions(context: Context, client: HealthConnectClient): Set<String> = buildSet {
+    /**
+     * Every read permission this device's Health Connect grants through its permission screen.
+     * READ_EXERCISE_ROUTES is not among them: Health Connect grants it only in its settings or
+     * from the route dialog ([HealthPlugin.requestExerciseRoutes]).
+     */
+    fun requestablePermissions(client: HealthConnectClient): Set<String> = buildSet {
         supportedTypes(client).forEach { add(it.readPermission) }
         if (featureAvailable(client, HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_IN_BACKGROUND)) {
             add(HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND)
@@ -92,17 +99,19 @@ internal object SyncEngine {
         if (featureAvailable(client, HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_HISTORY)) {
             add(HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY)
         }
-        if (platformDefines(context, HealthRecordTypes.EXERCISE_ROUTES_PERMISSION)) add(HealthRecordTypes.EXERCISE_ROUTES_PERMISSION)
     }
+
+    fun routesSupported(context: Context) = platformDefines(context, HealthRecordTypes.EXERCISE_ROUTES_PERMISSION)
 
     suspend fun run(context: Context, trigger: Trigger): RunResult = mutex.withLock {
         val db = SyncDatabase.get(context)
-        val connection = db.connection() ?: return RunResult(null, false)
-        if (db.setting("needsRepair") == "true") return RunResult(null, false)
+        val connection = db.connection() ?: return RunResult(null, RetryAction.NONE)
+        if (db.setting("needsRepair") == "true") return RunResult(null, RetryAction.NONE)
         running = true
         val errors = mutableListOf<String>()
         var result: DrainResult? = null
-        var retryLater = false
+        var readIncomplete = false
+        var needsRepair = false
         try {
             db.setSetting("lastAttemptAt", Instant.now().toString())
             if (trigger == Trigger.FOREGROUND) db.retryRejected()
@@ -128,23 +137,31 @@ internal object SyncEngine {
                         db.forgetAllCursors()
                         db.setSetting("historyGranted", historyGranted.toString())
                     }
+                    val routesGranted = HealthRecordTypes.EXERCISE_ROUTES_PERMISSION in granted
+                    if (Rereads.routesWidened(db.setting("routesGranted"), routesGranted)) db.requestReread(Rereads.EXERCISE_SESSIONS)
+                    db.setSetting("routesGranted", routesGranted.toString())
                     for (type in supportedTypes(client)) {
                         if (type.readPermission !in granted) {
                             db.forgetType(type.name)
                             continue
                         }
+                        val step = Rereads.step(db.reread(type.name), trigger)
+                        if (step == RereadStep.SKIP) continue
+                        if (step == RereadStep.START) db.startReread(type.name)
                         try {
-                            phase = "Reading ${type.name}"
-                            val window = HistoryWindow(historyDays(db), historyGranted)
-                            syncType(client, db, type, window) {
+                            phase = "${if (step == RereadStep.NORMAL) "Reading" else "Re-reading"} ${type.name}"
+                            val reading = TypeRead(type, HistoryWindow(historyDays(db), historyGranted), rereading = step != RereadStep.NORMAL)
+                            syncType(client, db, reading) {
                                 if (db.queueTotals().batches >= QUEUE_HIGH_WATER && drain() !is DrainResult.Drained) {
                                     throw QueueBackedUp("Upload is failing; reading paused until the queue drains")
                                 }
                             }
+                            if (routesGranted && reading.routesWithheld && trigger != Trigger.FOREGROUND) db.requestReread(type.name)
                         } catch (error: NeedsRepair) {
                             throw error
                         } catch (error: QueueBackedUp) {
                             errors += error.message!!
+                            readIncomplete = (result as? DrainResult.Interrupted)?.retryable == true
                             break
                         } catch (error: SecurityException) {
                             db.forgetType(type.name)
@@ -154,7 +171,7 @@ internal object SyncEngine {
                             if (error.isRateLimit()) {
                                 db.setTypeError(type.name, "Health Connect read quota reached")
                                 errors += "Health Connect read quota reached; reading resumes on the next sync"
-                                retryLater = true
+                                readIncomplete = true
                                 break
                             }
                             Log.w(TAG, "Reading ${type.name} failed", error)
@@ -173,6 +190,7 @@ internal object SyncEngine {
             if (errors.isEmpty()) db.setSetting("lastSuccessAt", Instant.now().toString())
             db.setSetting("lastError", errors.takeIf { it.isNotEmpty() }?.joinToString("; "))
         } catch (error: NeedsRepair) {
+            needsRepair = true
             db.setSetting("needsRepair", "true")
             db.setSetting("lastError", "The server rejected the client token (${error.message}). Pair this phone again.")
             HealthSyncWorker.cancel(context)
@@ -183,7 +201,20 @@ internal object SyncEngine {
             running = false
             phase = null
         }
-        RunResult(result, retryLater)
+        val outcome = RetryPolicy.outcome(needsRepair, result, readIncomplete)
+        val decision = RetryPolicy.decide(outcome, trigger, db.setting("retryStreak")?.toIntOrNull() ?: 0)
+        db.setSetting("retryStreak", decision.failureStreak.takeIf { it > 0 }?.toString())
+        try {
+            HealthSyncWorker.applyRetry(context, decision.action)
+        } catch (error: Exception) {
+            Log.w(TAG, "Scheduling the retry failed", error)
+        }
+        RunResult(result, decision.action)
+    }
+
+    private class TypeRead(val type: HealthRecordType, val window: HistoryWindow, val rereading: Boolean) {
+        /** An exercise session came back with its route withheld (`ConsentRequired`). */
+        var routesWithheld = false
     }
 
     private class Read(val type: HealthRecordType, val record: Record) {
@@ -192,25 +223,29 @@ internal object SyncEngine {
             record.metadata.id,
             RecordSerializers.startTime(envelope).toEpochMilli(),
             record.metadata.lastModifiedTime.toEpochMilli(),
+            Rereads.hash(envelope.toString()),
         )
     }
 
-    /** Records whose `modifiedAt` the index already holds were sent before and are skipped. */
-    private fun changed(db: SyncDatabase, reads: List<Read>): List<PendingRecord> {
+    /** Records the index already holds unchanged were sent before and are skipped (see [Rereads.mustSend]). */
+    private fun changed(db: SyncDatabase, reading: TypeRead, reads: List<Read>): List<PendingRecord> {
         if (reads.isEmpty()) return emptyList()
-        val known = db.knownModifiedAt(reads[0].type.name, reads.map { it.entry.recordId })
+        if (reads.any { (it.record as? ExerciseSessionRecord)?.exerciseRouteResult is ExerciseRouteResult.ConsentRequired }) {
+            reading.routesWithheld = true
+        }
+        val known = db.known(reading.type.name, reads.map { it.entry.recordId })
         return reads
-            .filter { known[it.entry.recordId] != it.entry.modifiedAt }
+            .filter { Rereads.mustSend(known[it.entry.recordId], it.entry.modifiedAt, it.entry.contentHash, reading.rereading) }
             .map { PendingRecord(it.type.name, it.envelope) }
     }
 
     private suspend fun syncType(
         client: HealthConnectClient,
         db: SyncDatabase,
-        type: HealthRecordType,
-        window: HistoryWindow,
+        reading: TypeRead,
         afterCommit: () -> Unit,
     ) {
+        val type = reading.type
         var cursor = db.cursor(type.name)
         while (cursor != null) {
             val page = client.getChanges(cursor)
@@ -223,7 +258,7 @@ internal object SyncEngine {
             val now = Instant.now()
             db.commit(
                 type.name,
-                Batches.build(changed(db, upserts), deleted.map { PendingDeletion(type.name, it, now) }),
+                Batches.build(changed(db, reading, upserts), deleted.map { PendingDeletion(type.name, it, now) }),
                 seen = upserts.map { it.entry },
                 scan = null,
                 removed = deleted,
@@ -233,7 +268,7 @@ internal object SyncEngine {
             if (!page.hasMore) return
             cursor = page.nextChangesToken
         }
-        backfill(client, db, type, window, afterCommit)
+        backfill(client, db, reading, afterCommit)
     }
 
     /**
@@ -244,10 +279,11 @@ internal object SyncEngine {
     private suspend fun backfill(
         client: HealthConnectClient,
         db: SyncDatabase,
-        type: HealthRecordType,
-        window: HistoryWindow,
+        reading: TypeRead,
         afterCommit: () -> Unit,
     ) {
+        val type = reading.type
+        val window = reading.window
         var state = db.backfill(type.name) ?: run {
             val now = System.currentTimeMillis()
             Backfill(
@@ -277,7 +313,7 @@ internal object SyncEngine {
             }
             db.commit(
                 type.name,
-                Batches.build(changed(db, reads), emptyList()),
+                Batches.build(changed(db, reading, reads), emptyList()),
                 seen = reads.map { it.entry },
                 scan = state.scan,
                 removed = emptyList(),
@@ -297,8 +333,33 @@ internal object SyncEngine {
             removed = missing,
             cursor = state.token,
             finishBackfill = true,
+            finishReread = reading.rereading,
         )
         afterCommit()
+    }
+
+    /** The newest readable workout whose route Health Connect withholds, or null. */
+    suspend fun sessionAwaitingRouteConsent(context: Context, client: HealthConnectClient): String? {
+        val db = SyncDatabase.get(context)
+        val granted = client.permissionController.getGrantedPermissions()
+        if (HealthPermission.getReadPermission(ExerciseSessionRecord::class) !in granted) return null
+        val now = System.currentTimeMillis()
+        val window = HistoryWindow(historyDays(db), HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY in granted)
+        var pageToken: String? = null
+        repeat(ROUTE_SEARCH_PAGES) {
+            val page = client.readRecords(
+                ReadRecordsRequest(
+                    recordType = ExerciseSessionRecord::class,
+                    timeRangeFilter = TimeRangeFilter.between(Instant.ofEpochMilli(window.start(now)), Instant.ofEpochMilli(now)),
+                    ascendingOrder = false,
+                    pageSize = 100,
+                    pageToken = pageToken,
+                ),
+            )
+            page.records.firstOrNull { it.exerciseRouteResult is ExerciseRouteResult.ConsentRequired }?.let { return it.metadata.id }
+            pageToken = page.pageToken?.takeIf { it.isNotEmpty() } ?: return null
+        }
+        return null
     }
 
     suspend fun status(context: Context, shellServerUrl: String?): JsonObject {
@@ -307,7 +368,7 @@ internal object SyncEngine {
         val client = if (availability == "available") HealthConnectClient.getOrCreate(context) else null
         val granted = client?.permissionController?.getGrantedPermissions() ?: emptySet()
         val supported = client?.let(::supportedTypes)?.map { it.name }?.toSet() ?: emptySet()
-        val requestable = client?.let { requestablePermissions(context, it) } ?: emptySet()
+        val requestable = client?.let { requestablePermissions(it) } ?: emptySet()
         fun extra(permission: String) = when {
             permission in granted -> "granted"
             permission in requestable -> "denied"
@@ -317,6 +378,7 @@ internal object SyncEngine {
         val totals = db.queueTotals()
         val queued = db.queuedByType()
         val rows = db.typeRows()
+        val rereads = db.rereads()
         val types = HealthRecordTypes.all.map { type ->
             val row = rows.getValue(type.name)
             val isGranted = type.readPermission in granted
@@ -347,6 +409,7 @@ internal object SyncEngine {
                 long("sentDeletions", row.sentDeletions)
                 instant("lastReadAt", row.lastReadAt?.let(Instant::ofEpochMilli))
                 string("lastError", row.lastError)
+                string("reread", StatusFields.reread(rereads[type.name]))
             }
         }
         return payload {
@@ -360,8 +423,16 @@ internal object SyncEngine {
                 boolean("allRecordTypesGranted", supported.isNotEmpty() && supported.all { HealthRecordTypes.named(it)!!.readPermission in granted })
                 string("background", extra(HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND))
                 string("history", extra(HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY))
-                string("exerciseRoutes", extra(HealthRecordTypes.EXERCISE_ROUTES_PERMISSION))
+                string("exerciseRoutes", StatusFields.routes(granted, client != null && routesSupported(context)))
             })
+            raw(
+                "power",
+                StatusFields.power(
+                    BackgroundAccess.ignoringBatteryOptimizations(context),
+                    BackgroundAccess.backgroundRestricted(context),
+                    BackgroundAccess.autostartIntents(context).isNotEmpty(),
+                ),
+            )
             raw("pairing", payload {
                 boolean("paired", connection != null)
                 string("clientId", connection?.clientId)
@@ -382,6 +453,7 @@ internal object SyncEngine {
                 long("queuedRecords", totals.records)
                 long("queuedDeletions", totals.deletions)
                 long("rejectedBatches", totals.rejected)
+                instant("nextRetryAt", runCatching { HealthSyncWorker.nextRetryAt(context) }.getOrNull())
                 raw("types", JsonArray(types))
             })
         }

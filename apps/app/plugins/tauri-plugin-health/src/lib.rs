@@ -89,6 +89,11 @@ fn unavailable_status() -> Value {
             "history": "unsupported",
             "exerciseRoutes": "unsupported",
         },
+        "power": {
+            "batteryOptimization": "unsupported",
+            "backgroundRestricted": null,
+            "autostartSettings": "unsupported",
+        },
         "pairing": { "paired": false, "clientId": null, "serverMatchesShell": false, "needsRepair": false },
         "settings": { "autoSync": false, "historyDays": 0 },
         "sync": {
@@ -101,6 +106,7 @@ fn unavailable_status() -> Value {
             "queuedRecords": 0,
             "queuedDeletions": 0,
             "rejectedBatches": 0,
+            "nextRetryAt": null,
             "types": [],
         },
     })
@@ -131,6 +137,33 @@ async fn open_health_connect<R: Runtime>(
 ) -> Result<Value, Error> {
     health.authorise(&webview)?;
     with_server(&health, "openHealthConnect", json!({})).await
+}
+
+#[tauri::command]
+async fn request_exercise_routes<R: Runtime>(
+    webview: Webview<R>,
+    health: State<'_, Health<R>>,
+) -> Result<Value, Error> {
+    health.authorise(&webview)?;
+    with_server(&health, "requestExerciseRoutes", json!({})).await
+}
+
+#[tauri::command]
+async fn request_battery_exemption<R: Runtime>(
+    webview: Webview<R>,
+    health: State<'_, Health<R>>,
+) -> Result<Value, Error> {
+    health.authorise(&webview)?;
+    with_server(&health, "requestBatteryExemption", json!({})).await
+}
+
+#[tauri::command]
+async fn open_autostart_settings<R: Runtime>(
+    webview: Webview<R>,
+    health: State<'_, Health<R>>,
+) -> Result<Value, Error> {
+    health.authorise(&webview)?;
+    with_server(&health, "openAutostartSettings", json!({})).await
 }
 
 #[tauri::command]
@@ -268,7 +301,10 @@ impl Builder {
                 unpair,
                 sync_now,
                 set_auto_sync,
-                set_history_days
+                set_history_days,
+                request_exercise_routes,
+                request_battery_exemption,
+                open_autostart_settings
             ])
             .setup(move |app, _api| {
                 #[cfg(target_os = "android")]
@@ -284,5 +320,22 @@ impl Builder {
                 Ok(())
             })
             .build()
+    }
+}
+
+#[cfg(all(test, not(target_os = "android")))]
+mod tests {
+    use super::unavailable_status;
+
+    #[test]
+    fn desktop_status_reports_every_contract_section_as_unsupported() {
+        let status = unavailable_status();
+        assert_eq!(status["availability"], "unsupported_platform");
+        assert_eq!(status["permissions"]["exerciseRoutes"], "unsupported");
+        assert_eq!(status["power"]["batteryOptimization"], "unsupported");
+        assert!(status["power"]["backgroundRestricted"].is_null());
+        assert_eq!(status["power"]["autostartSettings"], "unsupported");
+        assert!(status["sync"]["nextRetryAt"].is_null());
+        assert_eq!(status["settings"]["historyDays"], 0);
     }
 }
