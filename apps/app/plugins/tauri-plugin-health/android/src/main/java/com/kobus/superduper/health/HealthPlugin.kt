@@ -4,10 +4,12 @@ import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.webkit.WebView
 import androidx.activity.result.ActivityResult
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
+import androidx.health.connect.client.contracts.ExerciseRouteRequestContract
 import app.tauri.annotation.ActivityCallback
 import app.tauri.annotation.Command
 import app.tauri.annotation.TauriPlugin
@@ -36,21 +38,37 @@ class HealthPlugin(private val activity: Activity) : Plugin(activity) {
         }
     }
 
+    private fun fail(invoke: Invoke, error: Exception) = when (error) {
+        is CommandFailure -> invoke.reject(error.message, error.code)
+        is IllegalArgumentException -> invoke.reject(error.message, "INVALID_ARGUMENT")
+        else -> invoke.reject("${error.javaClass.simpleName}: ${error.message ?: ""}".trim(), "INTERNAL")
+    }
+
     private fun respond(invoke: Invoke, action: suspend (shellServerUrl: String?) -> Unit = {}) {
         val shellServerUrl = invoke.getArgs().optString("shellServerUrl").ifEmpty { null }
         scope.launch {
             try {
                 action(shellServerUrl)
                 invoke.resolve(JSObject(SyncEngine.status(context, shellServerUrl).toString()))
-            } catch (failure: CommandFailure) {
-                invoke.reject(failure.message, failure.code)
-            } catch (error: IllegalArgumentException) {
-                invoke.reject(error.message, "INVALID_ARGUMENT")
             } catch (error: Exception) {
-                invoke.reject("${error.javaClass.simpleName}: ${error.message ?: ""}".trim(), "INTERNAL")
+                fail(invoke, error)
             }
         }
     }
+
+    /** Opens [intent] for a result and resolves with the status once the user returns. */
+    private fun openForStatus(invoke: Invoke, intent: Intent, callback: String = "statusResult") {
+        activity.runOnUiThread {
+            try {
+                startActivityForResult(invoke, intent, callback)
+            } catch (error: ActivityNotFoundException) {
+                invoke.reject("The settings screen could not be opened", "UNSUPPORTED")
+            }
+        }
+    }
+
+    @ActivityCallback
+    fun statusResult(invoke: Invoke, @Suppress("UNUSED_PARAMETER") result: ActivityResult) = respond(invoke)
 
     private fun startSync() {
         scope.launch { SyncEngine.run(context, Trigger.FOREGROUND) }
@@ -68,13 +86,11 @@ class HealthPlugin(private val activity: Activity) : Plugin(activity) {
                     throw CommandFailure("UNAVAILABLE", "Health Connect is not installed or needs an update")
                 }
                 val client = HealthConnectClient.getOrCreate(context)
-                val permissions = SyncEngine.requestablePermissions(context, client)
+                val permissions = SyncEngine.requestablePermissions(client)
                 val intent = PermissionController.createRequestPermissionResultContract().createIntent(activity, permissions)
                 activity.runOnUiThread { startActivityForResult(invoke, intent, "permissionsResult") }
-            } catch (failure: CommandFailure) {
-                invoke.reject(failure.message, failure.code)
             } catch (error: Exception) {
-                invoke.reject("${error.javaClass.simpleName}: ${error.message ?: ""}".trim(), "INTERNAL")
+                fail(invoke, error)
             }
         }
     }
@@ -82,6 +98,74 @@ class HealthPlugin(private val activity: Activity) : Plugin(activity) {
     @ActivityCallback
     fun permissionsResult(invoke: Invoke, @Suppress("UNUSED_PARAMETER") result: ActivityResult) = respond(invoke) {
         if (SyncDatabase.get(context).connection() != null) startSync()
+    }
+
+    /**
+     * READ_EXERCISE_ROUTES is outside Health Connect's permission screen. Its route dialog,
+     * opened for one workout whose route is withheld, offers to allow all routes; without
+     * such a workout only Health Connect's settings for this app can grant it.
+     */
+    @Command
+    fun requestExerciseRoutes(invoke: Invoke) {
+        scope.launch {
+            try {
+                if (SyncEngine.availability(context) != "available") {
+                    throw CommandFailure("UNAVAILABLE", "Health Connect is not installed or needs an update")
+                }
+                val client = HealthConnectClient.getOrCreate(context)
+                if (HealthRecordTypes.EXERCISE_ROUTES_PERMISSION in client.permissionController.getGrantedPermissions()) {
+                    respond(invoke)
+                    return@launch
+                }
+                if (!SyncEngine.routesSupported(context)) {
+                    throw CommandFailure("UNSUPPORTED", "This Android version shares exercise routes only one workout at a time")
+                }
+                val sessionId = SyncEngine.sessionAwaitingRouteConsent(context, client)
+                val intent = sessionId?.let { ExerciseRouteRequestContract().createIntent(activity, it) } ?: healthConnectAppSettings()
+                openForStatus(invoke, intent, "exerciseRoutesResult")
+            } catch (error: Exception) {
+                fail(invoke, error)
+            }
+        }
+    }
+
+    @ActivityCallback
+    fun exerciseRoutesResult(invoke: Invoke, @Suppress("UNUSED_PARAMETER") result: ActivityResult) = respond(invoke) {
+        if (SyncDatabase.get(context).connection() != null) startSync()
+    }
+
+    private fun healthConnectAppSettings(): Intent {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            val intent = Intent(MANAGE_HEALTH_PERMISSIONS).putExtra(Intent.EXTRA_PACKAGE_NAME, context.packageName)
+            if (intent.resolveActivity(context.packageManager) != null) return intent
+        }
+        return Intent(HealthConnectClient.ACTION_HEALTH_CONNECT_SETTINGS)
+    }
+
+    @Command
+    fun requestBatteryExemption(invoke: Invoke) {
+        if (BackgroundAccess.ignoringBatteryOptimizations(context)) return respond(invoke)
+        val intent = BackgroundAccess.batteryExemptionIntent(context)
+            ?: return invoke.reject("This device has no battery optimisation settings", "UNSUPPORTED")
+        openForStatus(invoke, intent)
+    }
+
+    @Command
+    fun openAutostartSettings(invoke: Invoke) {
+        val candidates = BackgroundAccess.autostartIntents(context)
+        activity.runOnUiThread {
+            val opened = candidates.any { intent ->
+                try {
+                    activity.startActivity(intent)
+                    true
+                } catch (_: ActivityNotFoundException) {
+                    false
+                } catch (_: SecurityException) {
+                    false
+                }
+            }
+            if (opened) respond(invoke) else invoke.reject("This device has no autostart settings screen", "UNSUPPORTED")
+        }
     }
 
     @Command
@@ -153,5 +237,7 @@ class HealthPlugin(private val activity: Activity) : Plugin(activity) {
 
     private companion object {
         const val PROVIDER = "com.google.android.apps.healthdata"
+        // HealthConnectManager.ACTION_MANAGE_HEALTH_PERMISSIONS, Android 14+.
+        const val MANAGE_HEALTH_PERMISSIONS = "android.health.connect.action.MANAGE_HEALTH_PERMISSIONS"
     }
 }

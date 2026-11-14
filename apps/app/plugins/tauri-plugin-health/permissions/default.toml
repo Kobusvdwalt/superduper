@@ -11,4 +11,7 @@ permissions = [
   "allow-sync-now",
   "allow-set-auto-sync",
   "allow-set-history-days",
+  "allow-request-exercise-routes",
+  "allow-request-battery-exemption",
+  "allow-open-autostart-settings",
 ]

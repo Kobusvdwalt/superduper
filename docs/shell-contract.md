@@ -97,25 +97,29 @@ Reads Android Health Connect and pushes records to `<paired server>/api/graphql`
 is native: hourly WorkManager jobs and on-demand runs keep going when the web app is closed.
 
 Every health command resolves with the current [`HealthStatus`](#healthstatus). Commands that
-start work (`pair`, `sync_now`, `request_permissions`) return before the sync finishes; poll
+start work (`pair`, `sync_now`, `request_permissions`, `request_exercise_routes`) return before
+the sync finishes; poll
 `status` (for example every 2 s while `sync.running` is true) to follow progress. There are no
 events.
 
 On desktop every health command resolves (never rejects for being unsupported) with a status
 whose `availability` is `"unsupported_platform"`, `settings.autoSync` is `false` and
-`settings.historyDays` is `0`; nothing is stored. Argument checks still apply: `pair` and
+`settings.historyDays` is `0`; nothing is stored or opened. Argument checks still apply: `pair` and
 `set_history_days` reject `INVALID_ARGUMENT` (and `pair` rejects `FORBIDDEN`) as on Android.
 
-| Command                              | Arguments                             | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| ------------------------------------ | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `plugin:health\|status`              | none                                  | Reads the status.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `plugin:health\|request_permissions` | none                                  | Opens Health Connect's permission screen for every readable record type plus background and history access, and resolves when the user returns. Starts a sync when paired. Rejects `UNAVAILABLE` when Health Connect is missing or needs an update.                                                                                                                                                                                                                                                 |
-| `plugin:health\|open_health_connect` | none                                  | Opens Health Connect settings, or its Play Store page when it is not installed or needs an update.                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `plugin:health\|pair`                | `{ token: string, clientId: string }` | Stores the client token, client id and the shell's current server origin natively (Android Keystore AES-GCM), schedules the hourly job when auto-sync is on and starts a sync. Pairing with a different `clientId` or server first deletes all local sync state, including unsent batches. Rejects `INVALID_ARGUMENT` when `token` is shorter than 16 characters or contains whitespace, or `clientId` is empty or longer than 200 characters; `FORBIDDEN` when the shell has no server configured. |
-| `plugin:health\|unpair`              | none                                  | Cancels background sync and deletes the token, cursors, record index and outgoing queue. Settings are kept. Data already on the server is untouched.                                                                                                                                                                                                                                                                                                                                                |
-| `plugin:health\|sync_now`            | none                                  | Starts a sync (upload the queue, read changes, upload again). Rejects `NOT_PAIRED` or `UNAUTHENTICATED`.                                                                                                                                                                                                                                                                                                                                                                                            |
-| `plugin:health\|set_auto_sync`       | `{ enabled: boolean }`                | Turns the hourly background job on or off. Default `true`.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `plugin:health\|set_history_days`    | `{ days: number }`                    | How far back the initial read goes, 1 to 36500 days. Default 3650. Changing it re-reads every type; records already sent are not sent again. Rejects `INVALID_ARGUMENT` outside that range.                                                                                                                                                                                                                                                                                                         |
+| Command                                    | Arguments                             | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------------------ | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `plugin:health\|status`                    | none                                  | Reads the status.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `plugin:health\|request_permissions`       | none                                  | Opens Health Connect's permission screen for every readable record type plus background and history access, and resolves when the user returns. Starts a sync when paired. Rejects `UNAVAILABLE` when Health Connect is missing or needs an update. Exercise routes are not on that screen; see `request_exercise_routes`.                                                                                                                                                                          |
+| `plugin:health\|open_health_connect`       | none                                  | Opens Health Connect settings, or its Play Store page when it is not installed or needs an update.                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `plugin:health\|pair`                      | `{ token: string, clientId: string }` | Stores the client token, client id and the shell's current server origin natively (Android Keystore AES-GCM), schedules the hourly job when auto-sync is on and starts a sync. Pairing with a different `clientId` or server first deletes all local sync state, including unsent batches. Rejects `INVALID_ARGUMENT` when `token` is shorter than 16 characters or contains whitespace, or `clientId` is empty or longer than 200 characters; `FORBIDDEN` when the shell has no server configured. |
+| `plugin:health\|unpair`                    | none                                  | Cancels background sync and deletes the token, cursors, record index and outgoing queue. Settings are kept. Data already on the server is untouched.                                                                                                                                                                                                                                                                                                                                                |
+| `plugin:health\|sync_now`                  | none                                  | Starts a sync (upload the queue, read changes, upload again). Rejects `NOT_PAIRED` or `UNAUTHENTICATED`.                                                                                                                                                                                                                                                                                                                                                                                            |
+| `plugin:health\|set_auto_sync`             | `{ enabled: boolean }`                | Turns the hourly background job on or off. Default `true`.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `plugin:health\|set_history_days`          | `{ days: number }`                    | How far back the initial read goes, 1 to 36500 days. Default 3650. Changing it re-reads every type; records already sent are not sent again. Rejects `INVALID_ARGUMENT` outside that range.                                                                                                                                                                                                                                                                                                         |
+| `plugin:health\|request_exercise_routes`   | none                                  | Asks for `READ_EXERCISE_ROUTES` (see [Exercise routes](#exercise-routes)) and resolves when the user returns. Resolves at once, without a sync, when it is already granted; otherwise starts a sync when paired once the user returns. Rejects `UNAVAILABLE` when Health Connect is missing or needs an update, `UNSUPPORTED` when the platform does not define the permission (`permissions.exerciseRoutes` is `"unsupported"`).                                                                   |
+| `plugin:health\|request_battery_exemption` | none                                  | Opens the system dialog asking to exempt the app from battery optimisation (the app declares `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`), or the system's exemption list where the dialog is missing, and resolves when the user returns. Resolves at once when `power.batteryOptimization` is already `"exempt"`. Rejects `UNSUPPORTED` when neither screen exists.                                                                                                                                    |
+| `plugin:health\|open_autostart_settings`   | none                                  | Opens the phone vendor's autostart screen (Xiaomi HyperOS/MIUI, Huawei, Oppo/OnePlus ColorOS, Vivo) and resolves right away. Rejects `UNSUPPORTED` when this phone has none (`power.autostartSettings` is `"unsupported"`).                                                                                                                                                                                                                                                                         |
 
 ### Pairing flow
 
@@ -126,7 +130,55 @@ whose `availability` is `"unsupported_platform"`, `settings.autoSync` is `false`
 3. It calls `plugin:health|request_permissions` if `status().permissions.missing` is not empty.
 
 When the server answers `UNAUTHENTICATED` (for example the client was revoked), syncing stops,
-`pairing.needsRepair` becomes `true` and background sync is cancelled. Pair again to resume.
+`pairing.needsRepair` becomes `true` and background sync, including a pending retry, is
+cancelled. Pair again to resume.
+
+### Retries
+
+A sync of any kind that ends on a transient failure queues a retry as WorkManager work that
+needs a network connection, unless one is already pending. Transient: a network error, HTTP
+5xx, 408 or 429, a GraphQL error without a code, with `INTERNAL_SERVER_ERROR` or in an HTTP 5xx
+reply, a reply without the batch's acknowledgement, and the Health Connect read quota. The
+retry runs about 1 minute later; a retry that fails again backs off 1, 2, 4, 8, 16 and then 32
+minutes. Consecutive transient failures are counted across hourly runs, retries and foreground
+syncs, and only the first 7 are followed by a retry; after that only the hourly job runs until
+a sync succeeds, so a server that stays unreachable for days costs at most 7 extra runs. A
+foreground sync (`sync_now`, `pair`, `request_permissions`, `request_exercise_routes`) starts
+the count again and replaces a pending retry. Success, `UNAUTHENTICATED`, other HTTP 4xx and
+the API's permanent rejections cancel a pending retry. Syncs never overlap: one waits for the
+other. `sync.nextRetryAt` shows when the pending retry is due.
+
+### Exercise routes
+
+Health Connect's permission screen, including its "Allow all", never grants
+`READ_EXERCISE_ROUTES`. Until it is granted, every workout written by another app is read with
+`exerciseRouteResult: { "type": "ConsentRequired" }`. `request_exercise_routes` opens Health
+Connect's route dialog for the newest readable workout whose route is withheld; choosing
+"Allow all routes" there grants the permission ("Allow this route" grants one route once, which
+the app does not use). When no such workout exists it opens Health Connect's permission
+settings for the app (Android 14+) or Health Connect's settings, where the user sets exercise
+routes to allowed. Health Connect may still withhold routes from background reads; see
+[Re-reads](#re-reads).
+
+### Re-reads
+
+A re-read sends again every record of one type whose content differs from what the phone last
+read, also when its `modifiedAt` is unchanged; the record is sent as read, with its real
+`modifiedAt`. It backfills the whole history window in a foreground sync only, then the type
+continues incrementally. A pending re-read (`TypeStatus.reread: "pending"`) does not stop
+background syncs from reading the type; one that has started (`"running"`) waits for the next
+foreground sync. `ExerciseSessionRecord` is re-read when exercise route access changes to
+granted (including on the first sync after this version is installed with access already
+granted), and when a background sync read a workout whose route was withheld while access is
+granted.
+
+### Background limits
+
+The hourly job runs only when Android lets the app work in the background. `power` reports
+what the app can see: whether it is exempt from battery optimisation, whether the user
+restricted its background activity, and whether the phone has a vendor autostart screen.
+Vendors do not expose the autostart switch itself, so its state is never reported. On
+Xiaomi HyperOS and MIUI the job does not run while Autostart is off.
 
 ### `HealthStatus`
 
@@ -148,7 +200,12 @@ type HealthStatus = {
     allRecordTypesGranted: boolean;
     background: Grant; // READ_HEALTH_DATA_IN_BACKGROUND
     history: Grant; // READ_HEALTH_DATA_HISTORY (older than 30 days)
-    exerciseRoutes: Grant; // READ_EXERCISE_ROUTES (Android 15+; elsewhere routes need per-session consent and are sent as ConsentRequired)
+    exerciseRoutes: Grant; // READ_EXERCISE_ROUTES; "unsupported" when the platform does not define it (routes are then sent as ConsentRequired)
+  };
+  power: {
+    batteryOptimization: "exempt" | "optimized" | "unsupported"; // "unsupported" off Android
+    backgroundRestricted: boolean | null; // user restricted background activity (Android 9+); null elsewhere
+    autostartSettings: "available" | "unsupported"; // a vendor autostart screen exists; its switch is not readable
   };
   pairing: {
     paired: boolean;
@@ -169,7 +226,8 @@ type HealthStatus = {
     queuedBatches: number; // waiting for acknowledgement
     queuedRecords: number;
     queuedDeletions: number;
-    rejectedBatches: number; // refused by the server (BAD_USER_INPUT, CONFLICT); retried by every foreground sync (sync_now, pair, request_permissions)
+    rejectedBatches: number; // refused by the server (BAD_USER_INPUT, CONFLICT); retried by every foreground sync (sync_now, pair, request_permissions, request_exercise_routes)
+    nextRetryAt: string | null; // ISO-8601; when the pending retry is due (see Retries), null when none is waiting
     types: TypeStatus[]; // one per Health Connect record type (all 41) on Android, empty elsewhere
   };
 };
@@ -187,6 +245,7 @@ type TypeStatus = {
   sentDeletions: number;
   lastReadAt: string | null;
   lastError: string | null;
+  reread: "pending" | "running" | null; // see Re-reads
 };
 ```
 
@@ -204,6 +263,7 @@ type ShellError = {
     | "FORBIDDEN" // the calling page is not the configured server origin
     | "INVALID_ARGUMENT" // bad argument; `message` is user-facing
     | "UNAVAILABLE" // Health Connect missing or needs an update
+    | "UNSUPPORTED" // this phone has no such setting or screen (Android only; desktop resolves)
     | "NOT_PAIRED"
     | "UNAUTHENTICATED" // pairing was rejected by the server; pair again
     | "INTERNAL";

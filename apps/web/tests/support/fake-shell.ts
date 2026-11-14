@@ -16,6 +16,11 @@ export function androidStatus(overrides: Partial<HealthStatus> = {}): HealthStat
       history: "denied",
       exerciseRoutes: "denied",
     },
+    power: {
+      batteryOptimization: "optimized",
+      backgroundRestricted: false,
+      autostartSettings: "available",
+    },
     pairing: { paired: false, clientId: null, serverMatchesShell: false, needsRepair: false },
     settings: { autoSync: true, historyDays: 3650 },
     sync: {
@@ -28,6 +33,7 @@ export function androidStatus(overrides: Partial<HealthStatus> = {}): HealthStat
       queuedRecords: 0,
       queuedDeletions: 0,
       rejectedBatches: 0,
+      nextRetryAt: null,
       types: [
         {
           recordType: "StepsRecord",
@@ -42,6 +48,7 @@ export function androidStatus(overrides: Partial<HealthStatus> = {}): HealthStat
           sentDeletions: 0,
           lastReadAt: null,
           lastError: null,
+          reread: null,
         },
       ],
     },
@@ -111,6 +118,16 @@ export function fakeShell(options: { status?: HealthStatus; fail?: Record<string
       update({ settings: { ...status.settings, autoSync: Boolean(args.enabled) } }),
     "plugin:health|set_history_days": (args) =>
       update({ settings: { ...status.settings, historyDays: Number(args.days) } }),
+    "plugin:health|request_exercise_routes": () =>
+      update({ permissions: { ...status.permissions, exerciseRoutes: "granted" } }),
+    "plugin:health|request_battery_exemption": () =>
+      update({ power: { ...status.power, batteryOptimization: "exempt" } }),
+    "plugin:health|open_autostart_settings": () => {
+      if (status.power.autostartSettings === "unsupported") {
+        return Promise.reject({ code: "UNSUPPORTED", message: "No autostart settings screen." });
+      }
+      return status;
+    },
   };
 
   const invoke = (command: string, args?: Record<string, unknown>) => {

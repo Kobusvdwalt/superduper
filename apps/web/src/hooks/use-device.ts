@@ -95,6 +95,9 @@ export function useDeviceActions(shell: Shell) {
     syncNow: useStatusAction<void>(() => shell.health.syncNow()),
     setAutoSync: useStatusAction((enabled: boolean) => shell.health.setAutoSync(enabled)),
     setHistoryDays: useStatusAction((days: number) => shell.health.setHistoryDays(days)),
+    requestExerciseRoutes: useStatusAction<void>(() => shell.health.requestExerciseRoutes()),
+    requestBatteryExemption: useStatusAction<void>(() => shell.health.requestBatteryExemption()),
+    openAutostartSettings: useStatusAction<void>(() => shell.health.openAutostartSettings()),
   };
 }
 

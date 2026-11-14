@@ -22,7 +22,7 @@ internal class Backfill(
     val startedAt: Long,
 )
 
-internal class IndexEntry(val recordId: String, val startTime: Long, val modifiedAt: Long)
+internal class IndexEntry(val recordId: String, val startTime: Long, val modifiedAt: Long, val contentHash: String)
 
 internal class TypeRow(
     val cursor: Boolean,
@@ -39,7 +39,8 @@ internal class QueueTotals(val batches: Long, val records: Long, val deletions: 
 /**
  * Local sync state. Holds no record payloads except inside the encrypted outgoing queue:
  * per-type change cursors and backfill progress, an index of record ids already sent (so a
- * record missing from a later backfill can be reported as deleted), and the queue itself.
+ * record missing from a later backfill can be reported as deleted, and a re-read can tell
+ * which records changed by their content hash), pending re-reads, and the queue itself.
  */
 internal class SyncDatabase private constructor(context: Context) :
     SQLiteOpenHelper(context, "superduper-health.db", null, MIGRATIONS.size), Outbox {
@@ -103,8 +104,8 @@ internal class SyncDatabase private constructor(context: Context) :
 
     /** Removes the connection and everything synced under it. Settings are kept. */
     fun wipeSyncState() = transaction {
-        for (table in listOf("secrets", "cursors", "backfill", "record_index", "outbox", "type_stats")) delete(table, null, null)
-        delete("settings", "key IN ('lastSuccessAt','lastAttemptAt','lastError','needsRepair','historyGranted')", null)
+        for (table in listOf("secrets", "cursors", "backfill", "record_index", "outbox", "type_stats", "rereads")) delete(table, null, null)
+        delete("settings", "key IN ('lastSuccessAt','lastAttemptAt','lastError','needsRepair','historyGranted','routesGranted','retryStreak')", null)
     }
 
     fun cursor(type: String): String? =
@@ -135,16 +136,36 @@ internal class SyncDatabase private constructor(context: Context) :
         }, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
-    fun knownModifiedAt(type: String, ids: Collection<String>): Map<String, Long> {
-        val result = HashMap<String, Long>()
+    fun known(type: String, ids: Collection<String>): Map<String, KnownRecord> {
+        val result = HashMap<String, KnownRecord>()
         for (chunk in ids.chunked(500)) {
             val marks = chunk.joinToString(",") { "?" }
             db.rawQuery(
-                "SELECT record_id,modified_at FROM record_index WHERE record_type=? AND record_id IN ($marks)",
+                "SELECT record_id,modified_at,content_hash FROM record_index WHERE record_type=? AND record_id IN ($marks)",
                 arrayOf(type, *chunk.toTypedArray()),
-            ).use { while (it.moveToNext()) result[it.getString(0)] = it.getLong(1) }
+            ).use { while (it.moveToNext()) result[it.getString(0)] = KnownRecord(it.getLong(1), it.getString(2)) }
         }
         return result
+    }
+
+    fun reread(type: String): RereadState? =
+        db.rawQuery("SELECT started FROM rereads WHERE record_type=?", arrayOf(type))
+            .use { if (it.moveToFirst()) (if (it.getInt(0) == 1) RereadState.RUNNING else RereadState.PENDING) else null }
+
+    fun rereads(): Map<String, RereadState> =
+        db.rawQuery("SELECT record_type,started FROM rereads", null).use {
+            buildMap { while (it.moveToNext()) put(it.getString(0), if (it.getInt(1) == 1) RereadState.RUNNING else RereadState.PENDING) }
+        }
+
+    /** Asks the next foreground sync to re-read [type] (see [Rereads]); a started re-read is kept. */
+    fun requestReread(type: String) {
+        db.execSQL("INSERT OR IGNORE INTO rereads(record_type, started, requested_at) VALUES (?, 0, ?)", arrayOf(type, System.currentTimeMillis()))
+    }
+
+    fun startReread(type: String) = transaction {
+        delete("cursors", "record_type=?", arrayOf(type))
+        delete("backfill", "record_type=?", arrayOf(type))
+        execSQL("UPDATE rereads SET started=1 WHERE record_type=?", arrayOf(type))
     }
 
     /** Ids indexed for [type] that started inside the window but were not seen by [scan]. */
@@ -166,6 +187,7 @@ internal class SyncDatabase private constructor(context: Context) :
         cursor: String? = null,
         backfill: Backfill? = null,
         finishBackfill: Boolean = false,
+        finishReread: Boolean = false,
     ) = transaction {
         for (batch in batches) {
             insertOrThrow("outbox", null, ContentValues().apply {
@@ -187,12 +209,14 @@ internal class SyncDatabase private constructor(context: Context) :
                 put("record_id", entry.recordId)
                 put("start_time", entry.startTime)
                 put("modified_at", entry.modifiedAt)
+                put("content_hash", entry.contentHash)
                 if (scan != null) put("scan", scan) else putNull("scan")
             }, SQLiteDatabase.CONFLICT_REPLACE)
         }
         for (id in removed) delete("record_index", "record_type=? AND record_id=?", arrayOf(type, id))
         if (backfill != null) saveBackfill(type, backfill)
         if (finishBackfill) delete("backfill", "record_type=?", arrayOf(type))
+        if (finishReread) delete("rereads", "record_type=?", arrayOf(type))
         if (cursor != null) {
             insertWithOnConflict("cursors", null, ContentValues().apply {
                 put("record_type", type); put("token", cursor); put("updated_at", System.currentTimeMillis())
@@ -307,6 +331,10 @@ internal class SyncDatabase private constructor(context: Context) :
                 "CREATE TABLE record_index (record_type TEXT NOT NULL, record_id TEXT NOT NULL, start_time INTEGER NOT NULL, modified_at INTEGER NOT NULL, scan INTEGER, PRIMARY KEY (record_type, record_id)) WITHOUT ROWID",
                 "CREATE TABLE outbox (seq INTEGER PRIMARY KEY AUTOINCREMENT, batch_id TEXT NOT NULL UNIQUE, body BLOB NOT NULL, records INTEGER NOT NULL, deletions INTEGER NOT NULL, types TEXT NOT NULL, state TEXT NOT NULL, attempts INTEGER NOT NULL, last_error TEXT, created_at INTEGER NOT NULL)",
                 "CREATE TABLE type_stats (record_type TEXT PRIMARY KEY, sent_records INTEGER NOT NULL DEFAULT 0, sent_deletions INTEGER NOT NULL DEFAULT 0, last_read_at INTEGER, last_error TEXT)",
+            ),
+            listOf(
+                "ALTER TABLE record_index ADD COLUMN content_hash TEXT",
+                "CREATE TABLE rereads (record_type TEXT PRIMARY KEY, started INTEGER NOT NULL, requested_at INTEGER NOT NULL)",
             ),
         )
 
