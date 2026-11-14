@@ -11,6 +11,7 @@ export const rangeSearch = z.object({ from: day, to: day });
 export const seriesSearch = rangeSearch.extend({
   bucket: z.enum(BUCKETS).optional().catch(undefined),
   origin: text,
+  sources: z.enum(["ALL"]).optional().catch(undefined),
   aggregation: z.enum(["SUM", "AVG", "MIN", "MAX", "COUNT"]).optional().catch(undefined),
 });
 
