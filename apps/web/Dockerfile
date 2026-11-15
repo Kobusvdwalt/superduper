@@ -1,5 +1,5 @@
-# Production image; build context is the repository root (`build.sh` runs
-# `docker build -f Dockerfile ../..` from apps/web). Dockerfile.dockerignore applies.
+# Production image. The build context is the repository root:
+# docker build -f apps/web/Dockerfile . Dockerfile.dockerignore applies.
 # Serves the static build on port 3000 with an SPA fallback. `/api` is not handled here; the
 # ingress routes it to the API.
 FROM oven/bun:1.4.4 AS build

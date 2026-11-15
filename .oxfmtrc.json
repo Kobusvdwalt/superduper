@@ -5,6 +5,8 @@
   "sortImports": {},
   "ignorePatterns": [
     "apps/app/**",
+    "chart/templates/**",
+    "chart_deployment/**",
     "**/drizzle/**",
     "**/schema.graphql",
     "bun.lock",
