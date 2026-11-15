@@ -42,9 +42,9 @@ uses the `superduper` database on the managed Postgres 18 server
    `Tiental/infra` `deployments/vigil-acc.yaml`) syncs `chart_deployment/acc` on `main`
    into `superduper-acc`. Merging it does not start another build.
 
-GitHub does not run workflows on pull requests opened by a workflow, so the release pull
-request has no checks of its own; the run that opened it already rendered the chart with
-`helm template`. Run **Deploy** by hand (Actions → Deploy → Run workflow) to rebuild
+GitHub does not run `pull_request` workflows for pull requests a workflow opened, so the
+release run starts CI on the release branch itself; its `check` result is what the `main`
+branch rules require. Run **Deploy** by hand (Actions → Deploy → Run workflow) to rebuild
 without a new commit.
 
 The chart runs one `api` and one `web` pod and a public Traefik Ingress with a
