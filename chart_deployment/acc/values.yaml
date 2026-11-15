@@ -3,8 +3,8 @@
 env: acc
 ingress_host: superduper.cluster.vigil-acc.tiental.net
 image_repository: ghcr.io/kobusvdwalt/superduper
-version_api: 2.fc23652
-version_web: 2.fc23652
+version_api: 3.789c58b
+version_web: 3.789c58b
 image_pull_secrets: []
 secret_store_name: namespace-vault-cluster-superduper-acc
 postgres_password_ref: postgres-superduper-password
