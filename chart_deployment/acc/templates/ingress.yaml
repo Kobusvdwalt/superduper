@@ -1,0 +1,33 @@
+# Public on purpose: the API does its own auth (Better Auth sessions and client bearer
+# tokens), and devices reach /api from mobile networks, so there is no OIDC middleware.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: superduper
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - {{ include "superduper.host" . }}
+      secretName: superduper-ingress-certificate
+  rules:
+    - host: {{ include "superduper.host" . }}
+      http:
+        paths:
+          - pathType: Prefix
+            path: /api
+            backend:
+              service:
+                name: api
+                port:
+                  name: http
+          - pathType: Prefix
+            path: /
+            backend:
+              service:
+                name: web
+                port:
+                  name: http
