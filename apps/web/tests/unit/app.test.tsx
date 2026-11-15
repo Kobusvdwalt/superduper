@@ -228,6 +228,13 @@ describe("app", () => {
     expect(screen.getByText("not applied")).toBeDefined();
   });
 
+  test("the developer page links to the GraphQL explorer", async () => {
+    renderApp("/settings/developer");
+    const explorer = await screen.findByRole("link", { name: "Open the GraphQL explorer" });
+    expect(explorer.getAttribute("href")).toBe("/api/graphql");
+    expect(screen.getByRole("link", { name: "Developer" })).toBeDefined();
+  });
+
   test("creating a client shows its token once; revoking asks for confirmation", async () => {
     let revoked: string | null = null;
     const { calls } = renderApp("/settings/clients", {
