@@ -21,7 +21,8 @@ permissions:
   contents: read
 
 jobs:
-  check:
+  # Not named `check`: that name is the required status check on main, reported by ci.yml.
+  app:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
