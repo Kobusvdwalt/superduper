@@ -6,8 +6,7 @@
   "ignorePatterns": [
     "apps/app/**",
     "chart/templates/**",
-    ".github/pending-workflows/pipeline.yml",
-    ".github/workflows/pipeline.yml",
+    "chart_deployment/**",
     "**/drizzle/**",
     "**/schema.graphql",
     "bun.lock",

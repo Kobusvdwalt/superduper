@@ -1,15 +1,16 @@
 # Deployment
 
-Super Duper deploys the same way as `Tiental/vigil-next`: Tiental's shared pipeline
-builds images and proposes a rendered chart, and Argo CD deploys it. CI never talks to
-the cluster.
+Super Duper runs in Tiental's acceptance cluster next to `Tiental/vigil-next`, and deploys
+the same way: CI builds images and proposes a rendered chart, and Argo CD deploys it. CI
+never talks to the cluster.
 
-> **Not active yet.** The shared pipeline (`Tiental/workflows`, private, Actions access
-> limited to the organisation) and Argo CD's repository credentials (scoped to
-> `https://github.com/Tiental`) only work for repositories in the Tiental organisation.
-> Until this repository moves to `Tiental/superduper`, the pipeline caller is parked at
-> `.github/pending-workflows/pipeline.yml`, where GitHub does not run it, and only
-> `.github/workflows/ci.yml` runs.
+The repository stays in a personal account, so two things differ from vigil-next:
+
+- **The repository and its images are public.** Argo CD's credentials only cover the
+  Tiental organisation, and the cluster's image pull credential only covers its packages.
+  Public repositories and public packages need neither.
+- **The pipeline is this repository's own** (`.github/workflows/deploy.yml`). Tiental's
+  shared pipeline can only be called from organisation repositories.
 
 ## Environments
 
@@ -23,24 +24,28 @@ uses the `superduper` database on the managed Postgres 18 server
 
 ## How it works
 
-| Path                                      | What                                                                      |
-| ----------------------------------------- | ------------------------------------------------------------------------- |
-| `.github/project-config.yaml`             | Apps and environments for the shared pipeline                             |
-| `.github/pending-workflows/pipeline.yml`  | Unchanged copy of vigil-next's pipeline caller (`@v3.0.0`), parked        |
-| `apps/{api,web}/{check,build,publish}.sh` | What the pipeline runs per changed app                                    |
-| `apps/api/Dockerfile`                     | Production API image; build context is the repository root                |
-| `chart/`                                  | Helm chart source: `values.yaml` defaults, `values-acc.yaml` overrides    |
-| `chart_deployment/acc`                    | Rendered chart Argo CD syncs. Written only by the pipeline, never by hand |
-| `tests/chart/`                            | `helm template` tests, run by `bun run check:root`                        |
+| Path                           | What                                                                   |
+| ------------------------------ | ---------------------------------------------------------------------- |
+| `.github/workflows/deploy.yml` | Builds and publishes both images, proposes the release                 |
+| `apps/{api,web}/Dockerfile`    | Production images; the build context is the repository root            |
+| `chart/`                       | Helm chart source: `values.yaml` defaults, `values-acc.yaml` overrides |
+| `scripts/render-deployment.ts` | Writes `chart_deployment/<environment>` from `chart/`                  |
+| `chart_deployment/acc`         | The chart Argo CD syncs. Written only by a release, never by hand      |
+| `tests/chart/`                 | `helm template` tests, run by `bun run check:root`                     |
 
-1. A push to `main` runs `check.sh`, `build.sh` and `publish.sh` for each changed app and
-   pushes `ghcr.io/tiental/superduper/<app>:<n>.<sha7>`.
-2. The release job renders `chart/` with `values-acc.yaml` into `chart_deployment/acc`,
-   pins `version_api` / `version_web`, and opens or updates the `automation/deploy/acc`
-   pull request.
-3. A human approves the workflow runs on that pull request, reviews it and merges it.
-   Argo CD (configured by Duplo from `Tiental/infra` `deployments/vigil-acc.yaml`) syncs
-   `chart_deployment/acc` on `main` into `superduper-acc`.
+1. A push to `main` builds both images and pushes
+   `ghcr.io/kobusvdwalt/superduper/<app>:<run>.<sha7>`.
+2. The same run writes `chart_deployment/acc` (the chart, its merged values and both
+   image versions) and opens or updates the pull request from `automation/deploy/acc`.
+   Later pushes replace the proposal, so the open pull request is always the newest build.
+3. Merging that pull request is the deployment. Argo CD (configured by Duplo from
+   `Tiental/infra` `deployments/vigil-acc.yaml`) syncs `chart_deployment/acc` on `main`
+   into `superduper-acc`. Merging it does not start another build.
+
+GitHub does not run workflows on pull requests opened by a workflow, so the release pull
+request has no checks of its own; the run that opened it already rendered the chart with
+`helm template`. Run **Deploy** by hand (Actions → Deploy → Run workflow) to rebuild
+without a new commit.
 
 The chart runs one `api` and one `web` pod and a public Traefik Ingress with a
 `letsencrypt-prod` certificate: `/api` goes to the API, everything else to the web
@@ -65,24 +70,16 @@ External Secrets fails the whole Secret when any key is missing, so the API pod 
 
 In order:
 
-1. **Transfer the repository** from `Kobusvdwalt/superduper` to `Tiental/superduper`
-   (Settings → General → Transfer ownership). Update local remotes afterwards.
-2. **Allow Argo CD to read it.** Argo CD authenticates to `https://github.com/Tiental`
-   with the organisation's GitHub App. If the app is installed on selected repositories,
-   add `superduper` to it (Organisation settings → GitHub Apps → Configure).
-3. **Repository settings for the v3 pipeline**, per the
-   [workflows docs](https://github.com/Tiental/workflows/blob/main/docs/portal/deploying.md#required-repository-settings-v3):
-   enable Settings → Actions → General → _Allow GitHub Actions to create and approve pull
-   requests_, and protect `main` with a pull request, one approval, dismissal of stale
-   approvals and the required `pipeline / deployment` check (the importable
-   `templates/rulesets/reviewed-deployments.json` ruleset does this; enable it once the
-   pipeline below is active).
-4. **Merge the infra pull request** that adds the `superduper-acc` namespace, the
+1. **Make the repository public** (Settings → General → Change visibility). Issues, pull
+   requests and workflow logs become public with it.
+2. **Allow workflows to open pull requests:** Settings → Actions → General → _Allow GitHub
+   Actions to create and approve pull requests_.
+3. **Merge the infra pull request** that adds the `superduper-acc` namespace, the
    `superduper` database and the `superduper` password role to
    `deployments/vigil-acc.yaml`, and let Duplo Deploy apply it. It creates the namespace,
    its Key Vault and ClusterSecretStore, the Argo CD application, the database, the role
    and its grants, and copies `postgres-superduper-password` into the namespace vault.
-5. **Set the two hand-made secrets** in the namespace vault. Duplo shortens long vault
+4. **Set the two hand-made secrets** in the namespace vault. Duplo shortens long vault
    names, so look it up by tag:
 
    ```bash
@@ -93,15 +90,15 @@ In order:
      --name acc-superduper-owner-email --value "$owner" --output none
    ```
 
-6. **Activate the pipeline** in a pull request:
-   `git mv .github/pending-workflows/pipeline.yml .github/workflows/pipeline.yml`.
-   Keep `ci.yml` until the pipeline has run green, then decide whether to drop it.
-7. **First release.** Merging that pull request publishes both images and opens
-   `automation/deploy/acc`. Approve its workflow runs, review it and merge it.
+5. **First release.** The first push to `main` with `deploy.yml` publishes both images
+   and opens the release pull request. Before merging it, check that both packages are
+   public; GitHub creates packages private unless told otherwise. For `superduper/api`
+   and `superduper/web` under the account's Packages: Package settings → Change
+   visibility → Public. Then merge the release pull request.
+6. **Create the owner account straight away** at the public origin. Sign-up is open to
+   whoever enters the owner's email address first, and only until that account exists.
 
-The GHCR pull secret Duplo puts in every namespace (`tiental-images`) must be able to
-read the new `ghcr.io/tiental/superduper/*` packages; if pods show `ImagePullBackOff`
-with a 401, grant that credential access to the packages.
+If pods show `ImagePullBackOff`, a package is still private.
 
 ## Verify
 

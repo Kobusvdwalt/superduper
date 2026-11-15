@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+
+import { renderDeployment } from "../../scripts/render-deployment";
 
 type Manifest = { kind: string; metadata: { name: string }; spec: any };
 
@@ -65,7 +69,7 @@ test("acceptance configures the API for its public origin and vault secrets", ()
   const manifests = documents("acc");
   const pod = resource(manifests, "Deployment", "api").spec.template.spec;
   const api = pod.containers[0];
-  expect(api.image).toBe("ghcr.io/tiental/superduper/api:latest");
+  expect(api.image).toBe("ghcr.io/kobusvdwalt/superduper/api:latest");
   expect(env(api, "BETTER_AUTH_URL").value).toBe(
     "https://superduper.cluster.vigil-acc.tiental.net",
   );
@@ -98,17 +102,28 @@ test("acceptance configures the API for its public origin and vault secrets", ()
   );
 });
 
-test("release pins replace the image tags", () => {
-  const result = render("acc", [
-    "--set",
-    "version_api=7.abc1234",
-    "--set",
-    "version_web=7.abc1234",
-  ]);
-  expect(result.exitCode).toBe(0);
-  const output = result.stdout.toString();
-  expect(output).toContain("ghcr.io/tiental/superduper/api:7.abc1234");
-  expect(output).toContain("ghcr.io/tiental/superduper/web:7.abc1234");
+test("a release is a self-contained chart with the environment's values and pinned images", async () => {
+  const output = await mkdtemp(`${tmpdir()}/superduper-deployment-`);
+  try {
+    await renderDeployment("acc", "7.abc1234", output);
+    const result = Bun.spawnSync(
+      ["helm", "template", "superduper", output, "--namespace", "superduper-acc"],
+      { stdout: "pipe", stderr: "pipe" },
+    );
+    expect(result.stderr.toString()).toBe("");
+    expect(result.exitCode).toBe(0);
+    const rendered = result.stdout.toString();
+    expect(rendered).toContain("ghcr.io/kobusvdwalt/superduper/api:7.abc1234");
+    expect(rendered).toContain("ghcr.io/kobusvdwalt/superduper/web:7.abc1234");
+    expect(rendered).toContain("host: superduper.cluster.vigil-acc.tiental.net");
+    expect(rendered).toBe(
+      render("acc", ["--set", "version_api=7.abc1234", "--set", "version_web=7.abc1234"])
+        .stdout.toString()
+        .replaceAll(`${chart}/`, `${output}/`),
+    );
+  } finally {
+    await rm(output, { recursive: true, force: true });
+  }
 });
 
 test("a missing host fails the render instead of producing an ingress without one", () => {

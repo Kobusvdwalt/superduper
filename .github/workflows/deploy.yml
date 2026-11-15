@@ -1,0 +1,80 @@
+name: Deploy
+
+# Builds both images for every change on main and proposes the release as a pull request
+# from automation/deploy/acc. Argo CD deploys chart_deployment/acc once that is merged.
+# See docs/deployment.md.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      # Merging a release must not build the next one.
+      - chart_deployment/**
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  packages: write
+  pull-requests: write
+
+env:
+  IMAGE_REPOSITORY: ghcr.io/kobusvdwalt/superduper
+  DEPLOY_BRANCH: automation/deploy/acc
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Version
+        run: echo "VERSION=${{ github.run_number }}.${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+
+      - name: Build images
+        run: |
+          for app in api web; do
+            docker build -f "apps/$app/Dockerfile" -t "$IMAGE_REPOSITORY/$app:$VERSION" \
+              --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+              --label "org.opencontainers.image.revision=$GITHUB_SHA" .
+          done
+
+      - name: Render the release
+        run: |
+          bun scripts/render-deployment.ts acc "$VERSION"
+          helm template superduper chart_deployment/acc --namespace superduper-acc > /dev/null
+
+      - name: Publish images
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          echo "$GITHUB_TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+          for app in api web; do
+            docker push "$IMAGE_REPOSITORY/$app:$VERSION"
+          done
+
+      - name: Propose the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$DEPLOY_BRANCH"
+          git add chart_deployment/acc
+          git commit -m "chore(deploy): release $VERSION to acc"
+          git push --force origin "$DEPLOY_BRANCH"
+
+          title="chore(deploy): release $VERSION to acc"
+          body="Deploys \`$VERSION\` (commit $GITHUB_SHA) to acceptance. Argo CD syncs \`chart_deployment/acc\` after this is merged."
+          if [ -n "$(gh pr list --head "$DEPLOY_BRANCH" --state open --json number --jq '.[].number')" ]; then
+            gh pr edit "$DEPLOY_BRANCH" --title "$title" --body "$body"
+          else
+            gh pr create --base main --head "$DEPLOY_BRANCH" --title "$title" --body "$body"
+          fi
