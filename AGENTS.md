@@ -4,9 +4,9 @@ A personal life-history API. Clients push data into one GraphQL API, organised b
 `health`, `finance`, `commerce`, `movement`, `work`. The goal is to record as much as
 possible now, losslessly, and keep a structured model on top that is pleasant to query.
 
-The stack follows `Tiental/vigil-next` (a local checkout is usually at
-`/home/kobus/work/vigil-next`; treat it as a read-only reference for versions, config and
-patterns). This file lists where Super Duper deliberately differs.
+The stack follows the conventions of `Tiental/vigil-next`, a private sibling project. Where
+a local checkout of it exists, treat it as a read-only reference for versions, config and
+patterns. This file lists where Super Duper deliberately differs.
 
 ## Layout
 
