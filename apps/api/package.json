@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@pothos/core": "4.13.1",
-    "better-auth": "1.6.23",
+    "better-auth": "1.7.7",
     "drizzle-orm": "1.0.0-rc.4-de6c356",
     "elysia": "1.4.29",
     "graphql": "16.14.2",
