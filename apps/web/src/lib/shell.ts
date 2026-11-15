@@ -156,6 +156,29 @@ export function toShellError(reason: unknown): ShellError {
   return new ShellError("INTERNAL", "The app shell reported an error.");
 }
 
+const UPDATE_APP = "This version of the app cannot do this yet. Update the app.";
+
+/**
+ * The web app is deployed independently of installed shells, so an older shell may omit
+ * status fields and commands added to the contract after it was built.
+ */
+function fromAnyShellVersion(status: HealthStatus): HealthStatus {
+  const reported = status as Omit<HealthStatus, "power"> & { power?: Power };
+  return {
+    ...status,
+    power: reported.power ?? {
+      batteryOptimization: "unsupported",
+      backgroundRestricted: null,
+      autostartSettings: "unsupported",
+    },
+    sync: {
+      ...status.sync,
+      nextRetryAt: status.sync.nextRetryAt ?? null,
+      types: status.sync.types.map((type) => ({ ...type, reread: type.reread ?? null })),
+    },
+  };
+}
+
 export function detectShell(
   target: ShellWindow = globalThis as unknown as ShellWindow,
 ): Shell | null {
@@ -171,7 +194,11 @@ export function detectShell(
         (reason: unknown) => Promise.reject(toShellError(reason)),
       );
   const health = (command: string, args?: Record<string, unknown>) =>
-    call<HealthStatus>(`plugin:health|${command}`, args);
+    call<HealthStatus>(`plugin:health|${command}`, args).then(fromAnyShellVersion);
+  const addedAfterFirstRelease = (command: string) =>
+    health(command).catch((error: ShellError) =>
+      Promise.reject(error.code === "REFUSED" ? new ShellError("UNSUPPORTED", UPDATE_APP) : error),
+    );
 
   return {
     platform: marker.platform as Platform,
@@ -188,9 +215,9 @@ export function detectShell(
       syncNow: () => health("sync_now"),
       setAutoSync: (enabled) => health("set_auto_sync", { enabled }),
       setHistoryDays: (days) => health("set_history_days", { days }),
-      requestExerciseRoutes: () => health("request_exercise_routes"),
-      requestBatteryExemption: () => health("request_battery_exemption"),
-      openAutostartSettings: () => health("open_autostart_settings"),
+      requestExerciseRoutes: () => addedAfterFirstRelease("request_exercise_routes"),
+      requestBatteryExemption: () => addedAfterFirstRelease("request_battery_exemption"),
+      openAutostartSettings: () => addedAfterFirstRelease("open_autostart_settings"),
     },
   };
 }

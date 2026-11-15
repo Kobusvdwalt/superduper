@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { detectShell, ShellError, toShellError } from "@/lib/shell";
+import { detectShell, type HealthStatus, ShellError, toShellError } from "@/lib/shell";
 
 import { androidStatus, fakeShell } from "../support/fake-shell";
 
@@ -88,6 +88,41 @@ describe("shell commands", () => {
     );
     const error = await shell?.health.status().catch((reason: unknown) => reason);
     expect(error).toMatchObject({ code: "REFUSED", message: "plugin:health|status not allowed" });
+  });
+
+  test("a status from a shell built before power, retry and re-read existed is filled in", async () => {
+    const { power: _power, ...older } = androidStatus();
+    const status = {
+      ...older,
+      sync: {
+        ...older.sync,
+        nextRetryAt: undefined,
+        types: older.sync.types.map(({ reread: _reread, ...type }) => type),
+      },
+    } as unknown as HealthStatus;
+    const shell = detectShell(fakeShell({ status }).target);
+    const reported = await shell?.health.status();
+    expect(reported?.power).toEqual({
+      batteryOptimization: "unsupported",
+      backgroundRestricted: null,
+      autostartSettings: "unsupported",
+    });
+    expect(reported?.sync.nextRetryAt).toBeNull();
+    expect(reported?.sync.types.every((type) => type.reread === null)).toBe(true);
+  });
+
+  test("a command the installed shell does not have yet asks for an app update", async () => {
+    const shell = detectShell(
+      fakeShell({
+        fail: {
+          "plugin:health|request_exercise_routes":
+            "Command plugin:health|request_exercise_routes not found",
+        },
+      }).target,
+    );
+    const error = await shell?.health.requestExerciseRoutes().catch((reason: unknown) => reason);
+    expect(error).toMatchObject({ code: "UNSUPPORTED" });
+    expect((error as ShellError).message).toContain("Update the app");
   });
 
   test("a synchronous throw from invoke is a rejection, not an exception", async () => {
