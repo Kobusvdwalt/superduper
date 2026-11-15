@@ -18,6 +18,7 @@ import { Route as AuthenticatedMovementRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedWorkRouteImport } from './routes/_authenticated/work'
 import { Route as AuthenticatedHealthIndexRouteImport } from './routes/_authenticated/health/index'
 import { Route as AuthenticatedSettingsClientsRouteImport } from './routes/_authenticated/settings/clients'
+import { Route as AuthenticatedSettingsDeveloperRouteImport } from './routes/_authenticated/settings/developer'
 import { Route as AuthenticatedSettingsDeviceRouteImport } from './routes/_authenticated/settings/device'
 import { Route as AuthenticatedHealthMetricsMetricRouteImport } from './routes/_authenticated/health/metrics/$metric'
 import { Route as AuthenticatedHealthRecordsIndexRouteImport } from './routes/_authenticated/health/records/index'
@@ -71,6 +72,12 @@ const AuthenticatedSettingsClientsRoute =
   AuthenticatedSettingsClientsRouteImport.update({
     id: '/settings/clients',
     path: '/settings/clients',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSettingsDeveloperRoute =
+  AuthenticatedSettingsDeveloperRouteImport.update({
+    id: '/settings/developer',
+    path: '/settings/developer',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedSettingsDeviceRoute =
@@ -130,6 +137,7 @@ export interface FileRoutesByFullPath {
   '/movement': typeof AuthenticatedMovementRoute
   '/work': typeof AuthenticatedWorkRoute
   '/settings/clients': typeof AuthenticatedSettingsClientsRoute
+  '/settings/developer': typeof AuthenticatedSettingsDeveloperRoute
   '/settings/device': typeof AuthenticatedSettingsDeviceRoute
   '/health/': typeof AuthenticatedHealthIndexRoute
   '/health/metrics/$metric': typeof AuthenticatedHealthMetricsMetricRoute
@@ -148,6 +156,7 @@ export interface FileRoutesByTo {
   '/work': typeof AuthenticatedWorkRoute
   '/': typeof AuthenticatedIndexRoute
   '/settings/clients': typeof AuthenticatedSettingsClientsRoute
+  '/settings/developer': typeof AuthenticatedSettingsDeveloperRoute
   '/settings/device': typeof AuthenticatedSettingsDeviceRoute
   '/health': typeof AuthenticatedHealthIndexRoute
   '/health/metrics/$metric': typeof AuthenticatedHealthMetricsMetricRoute
@@ -168,6 +177,7 @@ export interface FileRoutesById {
   '/_authenticated/work': typeof AuthenticatedWorkRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/settings/clients': typeof AuthenticatedSettingsClientsRoute
+  '/_authenticated/settings/developer': typeof AuthenticatedSettingsDeveloperRoute
   '/_authenticated/settings/device': typeof AuthenticatedSettingsDeviceRoute
   '/_authenticated/health/': typeof AuthenticatedHealthIndexRoute
   '/_authenticated/health/metrics/$metric': typeof AuthenticatedHealthMetricsMetricRoute
@@ -188,6 +198,7 @@ export interface FileRouteTypes {
     | '/movement'
     | '/work'
     | '/settings/clients'
+    | '/settings/developer'
     | '/settings/device'
     | '/health/'
     | '/health/metrics/$metric'
@@ -206,6 +217,7 @@ export interface FileRouteTypes {
     | '/work'
     | '/'
     | '/settings/clients'
+    | '/settings/developer'
     | '/settings/device'
     | '/health'
     | '/health/metrics/$metric'
@@ -225,6 +237,7 @@ export interface FileRouteTypes {
     | '/_authenticated/work'
     | '/_authenticated/'
     | '/_authenticated/settings/clients'
+    | '/_authenticated/settings/developer'
     | '/_authenticated/settings/device'
     | '/_authenticated/health/'
     | '/_authenticated/health/metrics/$metric'
@@ -306,6 +319,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsClientsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/settings/developer': {
+      id: '/_authenticated/settings/developer'
+      path: '/settings/developer'
+      fullPath: '/settings/developer'
+      preLoaderRoute: typeof AuthenticatedSettingsDeveloperRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/settings/device': {
       id: '/_authenticated/settings/device'
       path: '/settings/device'
@@ -372,6 +392,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedWorkRoute: typeof AuthenticatedWorkRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedSettingsClientsRoute: typeof AuthenticatedSettingsClientsRoute
+  AuthenticatedSettingsDeveloperRoute: typeof AuthenticatedSettingsDeveloperRoute
   AuthenticatedSettingsDeviceRoute: typeof AuthenticatedSettingsDeviceRoute
   AuthenticatedHealthIndexRoute: typeof AuthenticatedHealthIndexRoute
   AuthenticatedHealthMetricsMetricRoute: typeof AuthenticatedHealthMetricsMetricRoute
@@ -390,6 +411,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedWorkRoute: AuthenticatedWorkRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedSettingsClientsRoute: AuthenticatedSettingsClientsRoute,
+  AuthenticatedSettingsDeveloperRoute: AuthenticatedSettingsDeveloperRoute,
   AuthenticatedSettingsDeviceRoute: AuthenticatedSettingsDeviceRoute,
   AuthenticatedHealthIndexRoute: AuthenticatedHealthIndexRoute,
   AuthenticatedHealthMetricsMetricRoute: AuthenticatedHealthMetricsMetricRoute,
