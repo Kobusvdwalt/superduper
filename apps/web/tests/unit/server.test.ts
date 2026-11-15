@@ -3,17 +3,16 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { GlobalRegistrator } from "@happy-dom/global-registrator";
-
 import { createHandler } from "../../server/index";
+import { bunFetchApi } from "../support/dom";
 
 describe("static server", () => {
   let dist: string;
   let handle: (request: Request) => Response;
+  const happyDomFetchApi = { Response: globalThis.Response, Request: globalThis.Request };
 
-  beforeAll(async () => {
-    // Happy DOM replaces the global Response with one that cannot stream a Bun.file.
-    await GlobalRegistrator.unregister();
+  beforeAll(() => {
+    Object.assign(globalThis, bunFetchApi);
     dist = mkdtempSync(join(tmpdir(), "superduper-web-"));
     mkdirSync(join(dist, "assets"));
     writeFileSync(join(dist, "index.html"), "<html>app</html>");
@@ -24,7 +23,7 @@ describe("static server", () => {
 
   afterAll(() => {
     rmSync(dist, { recursive: true, force: true });
-    GlobalRegistrator.register({ width: 1280, height: 800, url: "http://localhost:4401/" });
+    Object.assign(globalThis, happyDomFetchApi);
   });
 
   const get = (path: string, method = "GET") =>
