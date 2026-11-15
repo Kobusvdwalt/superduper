@@ -25,6 +25,7 @@ export const NAVIGATION: NavGroup[] = [
     items: [
       { label: "Clients", to: "/settings/clients", built: true },
       { label: "This device", to: "/settings/device", built: true },
+      { label: "Developer", to: "/settings/developer", built: true },
     ],
   },
 ];
