@@ -4,9 +4,6 @@ on:
   pull_request:
   push:
     branches: [main]
-  # deploy.yml starts this on its release branch: GitHub does not run pull_request
-  # workflows for pull requests a workflow opened.
-  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}

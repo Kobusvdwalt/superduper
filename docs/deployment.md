@@ -42,10 +42,11 @@ uses the `superduper` database on the managed Postgres 18 server
    `Tiental/infra` `deployments/vigil-acc.yaml`) syncs `chart_deployment/acc` on `main`
    into `superduper-acc`. Merging it does not start another build.
 
-GitHub does not run `pull_request` workflows for pull requests a workflow opened, so the
-release run starts CI on the release branch itself; its `check` result is what the `main`
-branch rules require. Run **Deploy** by hand (Actions → Deploy → Run workflow) to rebuild
-without a new commit.
+The release run checks the commit it builds (`bun run check:ci`) before building, and
+reports that as the `check` status on the release commit, which is what the `main` branch
+rules require. GitHub holds `ci.yml` on a pull request opened by a workflow until someone
+approves it ("1 workflow awaiting approval"); the release does not need it. Run **Deploy**
+by hand (Actions → Deploy → Run workflow) to rebuild without a new commit.
 
 The chart runs one `api` and one `web` pod and a public Traefik Ingress with a
 `letsencrypt-prod` certificate: `/api` goes to the API, everything else to the web
