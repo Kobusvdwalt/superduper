@@ -17,10 +17,10 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  actions: write
   contents: write
   packages: write
   pull-requests: write
+  statuses: write
 
 env:
   IMAGE_REPOSITORY: ghcr.io/kobusvdwalt/superduper
@@ -35,6 +35,11 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: package.json
+
+      - name: Check
+        run: |
+          bun install --frozen-lockfile
+          bun run check:ci
 
       - name: Version
         run: echo "VERSION=${{ github.run_number }}.${GITHUB_SHA::7}" >> "$GITHUB_ENV"
@@ -79,4 +84,11 @@ jobs:
           else
             gh pr create --base main --head "$DEPLOY_BRANCH" --title "$title" --body "$body"
           fi
-          gh workflow run ci.yml --ref "$DEPLOY_BRANCH"
+
+          # GitHub holds pull_request workflows on a pull request opened by a workflow until
+          # someone approves them, so ci.yml does not report here. The release commit is the
+          # commit checked above plus chart_deployment/acc, rendered and templated above.
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$(git rev-parse HEAD)" \
+            -f state=success -f context=check \
+            -f description="Checked as ${GITHUB_SHA::7} by this release's Deploy run" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
